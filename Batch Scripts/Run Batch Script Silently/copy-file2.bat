@@ -1,0 +1,1 @@
+copy C:\olddocs\Moving.bak.rtf C:\newdocs
