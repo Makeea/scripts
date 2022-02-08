@@ -2,4 +2,4 @@
 
 Scripts for everyone
 
-Batch Scripts are for everyday person or for IT Dept to get that thing done. 
+Scripts are for everyday people to get that one thing done. 
