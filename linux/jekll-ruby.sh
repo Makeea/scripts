@@ -28,5 +28,7 @@ ruby -v
 
 gem update
 gem install jekyll bundle
+bundle add webrick
 
+## bundle add webrick
 ## config from https://levelup.gitconnected.com/how-to-install-jekyll-on-wsl-2-13c3b285d513
