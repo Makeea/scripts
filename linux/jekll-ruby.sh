@@ -32,3 +32,4 @@ bundle add webrick
 
 ## bundle add webrick
 ## config from https://levelup.gitconnected.com/how-to-install-jekyll-on-wsl-2-13c3b285d513
+## bundle exec jekyll serve --livereload --unpublished --incremental
