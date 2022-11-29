@@ -1,5 +1,7 @@
 #!/bin/sh
 
+#Note: If you are using a legacy system that doesn't support the Ed25519 algorithm
+
 echo
 clear # clear the screen
 # gather info
@@ -32,9 +34,8 @@ git config --global user.email "$email" # use your github email
 git config --global init.defaultBranch main # change git main branch to, main
 git config --global core.editor "code --wait" # set VS Code as default git editor
 
-echo  Run cat ~/.ssh/id_ed25519.pub to get your key. 
+echo  Run cat ~/.ssh/id_rsa.pub to get your key. 
 cat ~/.ssh/id_ed25519.pub
 echo  Then select and copy the contents of the id_ed25519.pub file
 echo  Displayed in the terminal to your clipboard 
 echo  Need help visit https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account
- 
