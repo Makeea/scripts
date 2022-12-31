@@ -1,22 +1,54 @@
 #!/bin/sh
 
-# update the system
+#Uninstall old versions
+sudo apt remove docker docker-engine docker.io containerd runc -y
 
-# update Ubuntu
-sudo apt update -y # update the package versions
-sudo apt upgrade -y # upgrade installed packages to new versions if was found
-apt list --upgradable
-sudo apt list --upgradable
-sudo apt autoremove -y
 
-# Update System
+## Set up the repository
+sudo apt update -y
+sudo apt-get install \
+    ca-certificates \
+    curl \
+    gnupg \
+    lsb-release \
+    software-properties-common  \
+    apt-transport-https -y
 
-sudo apt update
-sudo apt upgrade
+# Add Docker’s official GPG key:
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-# Install Docker
+#Use the following command to set up the repository:
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-sudo apt install -y docker.io
-sudo systemctl enable docker
-sudo systemctl start docker
-sudo systemctl status docker
+# Install Docker Engine
+
+sudo apt update -y
+
+sudo apt install docker-ce docker-ce-cli containerd.io docker-compose-plugin -y
+
+sudo apt-get install docker-compose-plugin -y
+sudo apt install docker-compose -y
+
+sudo docker run hello-world
+docker compose version
+
+
+## Docker Engine post-installation steps
+
+# Create the docker group.
+sudo groupadd docker
+
+# Add your user to the docker group.
+sudo usermod -aG docker $USER
+
+# Configure Docker to start on boot with systemd
+sudo systemctl enable docker.service
+sudo systemctl enable containerd.service
+
+# make docker folder
+mkdir ~/docker
+
+sudo reboot
