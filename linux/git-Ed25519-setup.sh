@@ -39,3 +39,4 @@ cat ~/.ssh/id_ed25519.pub
 echo  Then select and copy the contents of the id_ed25519.pub file
 echo  Displayed in the terminal to your clipboard 
 echo  Need help visit https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account
+
