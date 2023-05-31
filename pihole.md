@@ -197,6 +197,41 @@ http://<your-pi-hole-ip-address>/admin/api.php?disable=300&auth=<your-webpasswor
 
 That's it! You have now set up Pi-hole with Unbound and created a shortcut to disable Pi-hole quickly.
 
+## Firebog
+
+Provides a curated collection of blocklists for use with Pi-hole. Blocklists are lists of domains known to serve ads, trackers, and other undesirable content. Adding these blocklists to Pi-hole enhances its ability to prevent your devices from connecting to these unwanted domains.
+
+```bash
+https://firebog.net
+```
+
+The Firebog categorizes these lists into three types:
+
+1.  **Suspicious Lists**: These lists contain domains reported or observed engaging in suspicious activities like phishing or distributing malware.
+2.  **Advertising Lists**: These lists contain domains that are known to serve ads.
+3.  **Tracking & Telemetry Lists**: These lists contain domains that are known to track users' activities or collect telemetry data.
+
+Why you might want to use The Firebog's blocklists with Pi-hole:
+
+1.  **Comprehensive**: The Firebog's blocklists are extensive and updated regularly, providing a wide range of domains to block.
+2.  **Categorized**: The categorization of lists into Suspicious, Advertising, and Tracking & Telemetry helps you choose the lists that align with your privacy and ad-blocking needs.
+3.  **Community-Driven**: These lists are maintained by a community of users and are open-source, making them transparent and reliable.
+
+Here's how you can add blocklists from The Firebog to your Pi-hole setup:
+
+1.  Visit The Firebog website.
+2.  You'll see several categories of lists. Each list has a direct URL. You will use this URL to add it to your Pi-hole.
+3.  In the Pi-hole admin interface, navigate to Group Management > Adlists.
+4.  In the Address field, paste the URL of the list you want to add.
+5.  Click "Add," and the list will be added to Pi-hole's blocklists.
+6.  Repeat this process for each list you want to add.
+
+Remember to regularly update your blocklists in Pi-hole to ensure they are up-to-date with the latest domains to block
+
+## Links
+
 https://docs.pi-hole.net/main/basic-install/
 
 https://docs.pi-hole.net/guides/dns/unbound/
+
+https://firebog.net/
