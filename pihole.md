@@ -196,3 +196,7 @@ http://<your-pi-hole-ip-address>/admin/api.php?disable=300&auth=<your-webpasswor
 3.  Replace <your-pi-hole-ip-address> with your Pi-hole's IP address and <your-webpassword> with the password you obtained in the previous step. This link will disable Pi-hole for 300 seconds (5 minutes). You can change the number after disable= to the number of seconds you want to disable Pi-hole.
 
 That's it! You have now set up Pi-hole with Unbound and created a shortcut to disable Pi-hole quickly.
+
+https://docs.pi-hole.net/main/basic-install/
+
+https://docs.pi-hole.net/guides/dns/unbound/
