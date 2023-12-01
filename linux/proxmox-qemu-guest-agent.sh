@@ -1,22 +1,24 @@
 #!/bin/sh
+# Script Description: This script installs and configures the Proxmox QEMU Guest Agent.
 
-apt list --upgradable
-sudo apt list --upgradable
-sudo apt autoremove -y
-sudo apt upgrade -y
+# Update the system
+echo "Updating the package list..."
 sudo apt update -y
 
-apt list --upgradable
-sudo apt list --upgradable
-sudo apt autoremove -y
+# Upgrade installed packages
+echo "Upgrading installed packages..."
 sudo apt upgrade -y
-sudo apt update -y
 
+# Clean up unnecessary packages
+echo "Removing unnecessary packages..."
 sudo apt autoremove -y
-sudo apt upgrade -y
-sudo apt update -y
 
+# Install and enable the QEMU Guest Agent
+echo "Installing QEMU Guest Agent..."
+sudo apt install qemu-guest-agent -y
 
-sudo apt install qemu-guest-agent
-
+# Enable the QEMU Guest Agent service
+echo "Enabling the QEMU Guest Agent service..."
 sudo systemctl enable qemu-guest-agent
+
+echo "Proxmox QEMU Guest Agent installation and configuration completed."
