@@ -9,6 +9,8 @@ This script retrieves a list of installed programs on the computer and saves it 
 Author: Claire Rosario
 Website: Rosario.one
 
+This exports to a folder called System info on your desktop
+
 #>
 
 # Get a list of installed programs
