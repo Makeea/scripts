@@ -1,43 +1,51 @@
 #!/bin/sh
 
-#Note: If you are using a legacy system that doesn't support the Ed25519 algorithm
+# Clearing the screen for better readability of the script output
+clear 
 
-echo
-clear # clear the screen
-# gather info
-echo Please enter your full name for git:
+# Prompting the user for their full name and email for Git configuration
+echo "Please enter your full name for Git:"
 read name
-echo Please enter the email you wish to use with git:
+echo "Please enter the email you wish to use with Git:"
 read email
-echo
 
-
-# validation of user input
-echo name: $name
-echo e-mail: $email
-echo "Are you sure this is all correct and you wish to proceed? [yN]:"
+# Validating the provided name and email inputs
+echo "Name: $name"
+echo "E-mail: $email"
+echo "Are you sure this is all correct and you wish to proceed? [y/N]:"
 read REPLY
 
-echo This creates a new SSH key, using the provided email as a label.
+# Exit the script if the user does not confirm
+if [ "$REPLY" != "y" ]; then
+  echo "Aborting..."
+  exit 1
+fi
+
+# Generating a new SSH key using RSA algorithm
+# Note: RSA is used here for broader compatibility with legacy systems
+echo "Creating a new SSH key, using the provided email as a label..."
 ssh-keygen -t rsa -b 4096 -C "$email"
 
-# please uncomment if you use anything other then the default name
-# echo Start the ssh-agent in the background.
+# Uncomment the following lines if you are not using the default key name 'id_rsa'
+# Start the ssh-agent in the background
 # eval "$(ssh-agent -s)"
 
-# echo Adding your SSH private key to the ssh-agent
-# ssh-add ~/.ssh/id_ed25519
+# Add the newly created SSH private key to the ssh-agent
+# ssh-add ~/.ssh/id_rsa
 
+# Configuring Git with the user's name and email
+echo "Configuring Git with your details..."
+git config --global user.name "$name" # Set the global Git username
+git config --global user.email "$email" # Set the global Git email
+git config --global init.defaultBranch main # Set the default branch name to 'main'
+git config --global core.editor "code --wait" # Set Visual Studio Code as the default Git editor
 
-# config git
-git config --global user.name "$name" # update github name
-git config --global user.email "$email" # use your github email
-git config --global init.defaultBranch main # change git main branch to, main
-git config --global core.editor "code --wait" # set VS Code as default git editor
-
-echo  Run cat ~/.ssh/id_rsa.pub to get your key. 
+# Displaying instructions for adding the SSH key to GitHub
+echo "Your SSH public key is:"
 cat ~/.ssh/id_rsa.pub
-echo  Then select and copy the contents of the id_rsa.pub file
-echo  Displayed in the terminal to your clipboard 
-echo  Need help visit https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account
- 
+echo
+echo "Select and copy the contents of the id_rsa.pub file displayed in the terminal to your clipboard."
+echo "For assistance in adding this key to your GitHub account, visit:"
+echo "https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account"
+
+echo "Script completed successfully."
