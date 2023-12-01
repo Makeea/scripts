@@ -1,9 +1,5 @@
 #!/bin/sh
 
-# Script Description:
-# This script sets up Git and SSH for a user by generating an SSH key, configuring Git,
-# and providing instructions for adding the SSH key to their GitHub account.
-
 # Clearing the screen for better readability of the script output
 clear 
 
