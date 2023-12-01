@@ -1,24 +1,35 @@
 #!/bin/sh
 
-# Uninstall and then reinstall System Settings (unity-control-center) from the Ubuntu Software Center application.
+# Script Description:
+# This script fixes the unity-control-center by uninstalling and reinstalling it.
+# It updates the system, uninstalls unity-control-center, reinstalls it, and provides the option to reboot.
 
-# uninstall control center aka settings on ubuntu desktop
+# Step 0: Explain the purpose of the script
+echo "This script fixes the unity-control-center by uninstalling and reinstalling it."
+echo "It will update your system, uninstall unity-control-center, reinstall it, and optionally reboot."
+
+# Step 1: Uninstall unity-control-center
+echo "Step 1: Uninstalling unity-control-center..."
 sudo apt-get remove unity-control-center -y
 
-# update Ubuntu
-sudo apt update -y # update the package versions
-sudo apt upgrade -y # upgrade installed packages to new versions if was found
-apt list --upgradable
-sudo apt list --upgradable
-sudo apt autoremove -y
+# Step 2: Update the system
+echo "Step 2: Updating the system..."
+sudo apt update -y         # Update the package list
+sudo apt upgrade -y        # Upgrade installed packages to the latest versions
 
-# Update System
-
-sudo apt update
-sudo apt upgrade
-
-# reinstall unity-control-center
-
+# Step 3: Reinstall unity-control-center
+echo "Step 3: Reinstalling unity-control-center..."
 sudo apt-get install unity-control-center -y
 
-sudo reboot
+# Ask the user if they want to reboot
+echo -n "Do you want to reboot now? (yes/no): "
+read -t 30 answer
+
+if [ "$answer" = "yes" ]; then
+    echo "Rebooting..."
+    sudo reboot
+else
+    echo "You chose not to reboot. Please consider rebooting soon for the changes to take effect."
+fi
+
+echo "unity-control-center fix completed."
