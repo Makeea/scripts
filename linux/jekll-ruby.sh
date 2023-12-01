@@ -1,35 +1,47 @@
 #!/bin/sh
+
+# Script Description:
+# This script updates the system, installs necessary dependencies for Ruby, Node.js, and Yarn,
+# and sets up Ruby using rbenv. It then installs the latest stable version of Ruby and Jekyll.
+
+# Update and upgrade system packages
 sudo apt-get update -y && sudo apt-get upgrade -y
-sudo apt-add-repository ppa:brightbox/ruby-ng
-sudo apt-get update -y
 
+# Install dependencies for building Ruby and other essential tools
+sudo apt-get install -y git-core zlib1g-dev build-essential libssl-dev libreadline-dev \
+libyaml-dev libsqlite3-dev sqlite3 libxml2-dev libxslt1-dev libcurl4-openssl-dev \
+software-properties-common libffi-dev nodejs yarn
+
+# Install rbenv for managing Ruby versions
 cd $HOME
-sudo apt-get update -y 
-sudo apt install curl -y
-curl -sL <https://deb.nodesource.com/setup_19.x> | sudo -E bash -
-curl -sS <https://dl.yarnpkg.com/debian/pubkey.gpg> | sudo apt-key add -
-echo "deb <https://dl.yarnpkg.com/debian/> stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-sudo apt-get update -y
-sudo apt-get install -y git-core zlib1g-dev build-essential libssl-dev libreadline-dev libyaml-dev libsqlite3-dev sqlite3 libxml2-dev libxslt1-dev libcurl4-openssl-dev software-properties-common libffi-dev nodejs yarn
-
-cd
-git clone <https://github.com/rbenv/rbenv.git> ~/.rbenv
+git clone https://github.com/rbenv/rbenv.git ~/.rbenv
 echo 'export PATH="$HOME/.rbenv/bin:$PATH"' >> ~/.bashrc
 echo 'eval "$(rbenv init -)"' >> ~/.bashrc
 exec $SHELL
 
-git clone <https://github.com/rbenv/ruby-build.git> ~/.rbenv/plugins/ruby-build
+# Install ruby-build as a rbenv plugin, this provides the `rbenv install` command
+git clone https://github.com/rbenv/ruby-build.git ~/.rbenv/plugins/ruby-build
 echo 'export PATH="$HOME/.rbenv/plugins/ruby-build/bin:$PATH"' >> ~/.bashrc
 exec $SHELL
 
-rbenv install 3.0.1
-rbenv global 3.0.1
+# Install the latest stable version of Ruby
+rbenv install 3.1.2 # As of my last update, 3.1.2 is the latest stable version
+rbenv global 3.1.2
 ruby -v
 
-gem update
-gem install jekyll bundle
-bundle add webrick
+# Update RubyGems and install Jekyll and Bundler
+gem update --system
+gem install jekyll bundler
 
-## bundle add webrick
-## config from https://levelup.gitconnected.com/how-to-install-jekyll-on-wsl-2-13c3b285d513
-## bundle exec jekyll serve --livereload --unpublished --incremental
+# Webrick is included with Ruby 3.0 and later
+# If needed for older versions, uncomment the following line:
+# bundle add webrick
+
+# Install Node.js and Yarn (for JavaScript runtime and package management)
+curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash - # Using LTS version of Node.js
+curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+sudo apt-get update -y
+sudo apt-get install -y nodejs yarn
+
+echo "Ruby and Jekyll installation completed."
