@@ -1,8 +1,10 @@
 #!/bin/sh
 
 # Script Description:
-# This script fixes the unity-control-center by uninstalling and reinstalling it.
-# It updates the system, uninstalls unity-control-center, reinstalls it, and provides the option to reboot.
+# This script is essential for system stability and user convenience. It fixes issues related to the `unity-control-center` on an Ubuntu system.
+# The control center is a critical component responsible for managing system settings. When it malfunctions or becomes corrupted, it can lead to problems with system configuration and user experience.
+# This script addresses these issues by uninstalling and reinstalling the `unity-control-center`, ensuring system updates are applied, and providing an option to reboot the system for changes to take effect.
+# It offers a user-friendly approach to troubleshooting and restores the functionality of the control center, ultimately enhancing the overall system's performance and usability.
 
 # Step 0: Explain the purpose of the script
 echo "This script fixes the unity-control-center by uninstalling and reinstalling it."
