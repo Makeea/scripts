@@ -21,9 +21,10 @@ install_update_docker_compose() {
 
     # Verify installation
     if command -v docker-compose &> /dev/null; then
-        echo "Docker Compose $(docker-compose --version) is installed/updated successfully."
+        echo "Docker Compose installed/updated successfully."
     else
         echo "Docker Compose installation/update failed."
+        exit 1
     fi
 }
 
@@ -35,6 +36,15 @@ ensure_path() {
     fi
 }
 
+# Function to display Docker Compose version
+display_docker_compose_version() {
+    if command -v docker-compose &> /dev/null; then
+        docker-compose --version
+    else
+        echo "Docker Compose is not installed."
+    fi
+}
+
 # Check if Docker is installed
 check_docker
 
@@ -43,3 +53,6 @@ install_update_docker_compose
 
 # Ensure Docker Compose is in the user's PATH
 ensure_path
+
+# Display Docker Compose version
+display_docker_compose_version
