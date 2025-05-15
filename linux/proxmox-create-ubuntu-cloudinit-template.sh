@@ -1,90 +1,124 @@
 #!/bin/bash
 
+# ================================================
+# Proxmox Ubuntu Cloud-Init Template Script (Beginner-Friendly)
+# ================================================
+
 echo ""
 echo "=============================================="
-echo "  Proxmox Cloud-Init Template Setup Script"
+echo "  Proxmox Ubuntu Template Script"
 echo "=============================================="
 echo ""
 echo "This script will:"
-echo "- Download an official Ubuntu cloud image"
-echo "- Create a VM with Cloud-Init (ID 9000 or 9001 by default)"
-echo "- Resize the disk to 32GB"
-echo "- Ask to convert the VM into a reusable template"
+echo "- Download an Ubuntu cloud image"
+echo "- Create a VM (Ubuntu 22.04 or 24.04)"
+echo "- Let you pick VM ID, RAM, and disk size"
+echo "- Optionally convert it into a template"
 echo ""
-echo "You can later clone the template like this:"
+
+echo "Later, you can clone your template like this:"
 echo "  qm clone <VMID> 101 --name my-ubuntu-vm"
 echo "  qm set 101 --ipconfig0 ip=dhcp"
 echo "  qm start 101"
 echo ""
-echo "----------------------------------------------"
-echo "Which Ubuntu version do you want to use?"
-echo "1) Ubuntu 22.04 (Jammy) → default VMID 9000"
-echo "2) Ubuntu 24.04 (Noble) → default VMID 9001"
-read -p "Enter 1 or 2: " VERSION_CHOICE
 
-if [ "$VERSION_CHOICE" == "1" ]; then
-  OS_VERSION="jammy"
-  FRIENDLY_VERSION="22.04"
-  SUGGESTED_VMID=9000
-elif [ "$VERSION_CHOICE" == "2" ]; then
-  OS_VERSION="noble"
-  FRIENDLY_VERSION="24.04"
-  SUGGESTED_VMID=9001
+# Ask the user which Ubuntu version to use
+echo "Pick Ubuntu version:"
+echo "1 = Ubuntu 22.04"
+echo "2 = Ubuntu 24.04"
+read -p "Enter 1 or 2: " version
+
+# Set variables based on choice
+if [ "$version" == "1" ]; then
+  osver="jammy"
+  vmver="22.04"
+  vmid="9000"
+elif [ "$version" == "2" ]; then
+  osver="noble"
+  vmver="24.04"
+  vmid="9001"
 else
   echo "Invalid choice. Exiting."
   exit 1
 fi
 
-# Prompt until a free VMID is selected
+# Loop until the user provides an unused VM ID
 while true; do
-  VMID=$SUGGESTED_VMID
-
-  if qm status "$VMID" &>/dev/null; then
+  if qm status $vmid &>/dev/null; then
     echo ""
-    echo "❌ VMID $VMID is already in use!"
+    echo "❌ VM ID $vmid is already used."
     echo "To check what it is, run:"
-    echo "  qm list | grep $VMID"
-    read -p "Enter a different VMID to use instead: " SUGGESTED_VMID
+    echo "  qm list | grep $vmid"
+    read -p "Enter a different VM ID to use instead: " vmid
   else
     break
   fi
 done
 
-VMNAME="ubuntu-${FRIENDLY_VERSION}-template-${VMID}"
-STORAGE="local-lvm"
-BRIDGE="vmbr0"
-IMAGE="${OS_VERSION}-server-cloudimg-amd64.img"
-URL="https://cloud-images.ubuntu.com/${OS_VERSION}/current/${IMAGE}"
-
-cd /root || exit 1
-
-echo ""
-echo "Selected Ubuntu $FRIENDLY_VERSION → VMID $VMID"
-echo "----------------------------------------------"
-echo "Downloading the Ubuntu cloud image..."
-if [ ! -f "$IMAGE" ]; then
-  wget "$URL"
-else
-  echo "Image already exists. Skipping download."
+# Ask the user how much RAM to assign
+read -p "How much RAM (in MB) should the VM have? (default is 2048): " ram
+if [ -z "$ram" ]; then
+  ram="2048"
 fi
 
-echo "Creating VM $VMID..."
-qm create $VMID --name $VMNAME --memory 2048 --cores 2 --net0 virtio,bridge=$BRIDGE
-qm importdisk $VMID $IMAGE $STORAGE
-qm set $VMID --scsihw virtio-scsi-pci --scsi0 ${STORAGE}:vm-${VMID}-disk-0
-qm set $VMID --ide2 ${STORAGE}:cloudinit
-qm set $VMID --boot c --bootdisk scsi0
-qm set $VMID --serial0 socket --vga serial0
-qm resize $VMID scsi0 32G
+# Ask the user how big the disk should be
+read -p "How big should the disk be (in GB)? (default is 32): " disksize
+if [ -z "$disksize" ]; then
+  disksize="32"
+fi
 
+# Set other required values
+name="ubuntu-${vmver}-template-${vmid}"
+bridge="vmbr0"
+storage="local-lvm"
+image="${osver}-server-cloudimg-amd64.img"
+url="https://cloud-images.ubuntu.com/${osver}/current/${image}"
+
+# Move to /root (working directory)
+cd /root || exit 1
+
+# Download the cloud image if it's not already there
 echo ""
-read -p "Are you ready to convert VM $VMID to a template? (y/n): " CONFIRM
-if [[ "$CONFIRM" == "y" || "$CONFIRM" == "Y" ]]; then
-  qm template $VMID
-  echo "✅ Template created: $VMNAME (Ubuntu $FRIENDLY_VERSION)"
+echo "Getting Ubuntu $vmver image..."
+if [ ! -f "$image" ]; then
+  wget "$url"
+else
+  echo "Already have it!"
+fi
+
+# Create the VM and attach the disk
+echo "Creating VM $vmid..."
+qm create $vmid --name $name --memory $ram --cores 2 --net0 virtio,bridge=$bridge
+qm importdisk $vmid $image $storage
+qm set $vmid --scsihw virtio-scsi-pci --scsi0 ${storage}:vm-${vmid}-disk-0
+qm set $vmid --ide2 ${storage}:cloudinit
+qm set $vmid --boot c --bootdisk scsi0
+qm set $vmid --serial0 socket --vga serial0
+
+# Resize the disk to the user-specified size
+echo "Resizing disk to ${disksize}G..."
+qm resize $vmid scsi0 "${disksize}G"
+
+# Ask the user if they want to turn this VM into a template
+echo ""
+read -p "Do you want to turn VM $vmid into a template now? (y/n): " make_template
+
+if [[ "$make_template" == "y" || "$make_template" == "Y" ]]; then
+  qm template $vmid
+
+  echo ""
+  echo "✅ Your VM $vmid was successfully converted to a template!"
+  echo ""
+  echo "📦 Proxmox renamed the disk from:"
+  echo "    vm-${vmid}-disk-0 → base-${vmid}-disk-0"
+  echo "This is expected — templates use a 'base-' prefix so they can be cloned efficiently."
+  echo ""
+  echo "⚠️ You might also see this message:"
+  echo "    WARNING: Combining activation change with other commands is not advised."
+  echo "Don't worry — this is normal and nothing is broken."
 else
   echo ""
-  echo "⏭️ Skipped converting VM $VMID."
-  echo "To convert it later, run:"
-  echo "  qm template $VMID"
+  echo "⏭️ Skipped converting VM $vmid."
+  echo "To convert it later, run this command:"
+  echo "  qm template $vmid"
 fi
