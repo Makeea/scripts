@@ -12,3 +12,5 @@ Depending on the file type, use one of the following methods:
 
 ## 📂 Files and What They Do
 - `windows 11/Restore Win 11 Right Click.reg` – Restores the classic Windows 10-style right-click context menu in Windows 11 by modifying the registry.
+
+- `Enables “End Task” in the right-click context menu of the Windows 11 Taskbar and app title bars by toggling the TaskKillInTitleBar developer registry flag.
