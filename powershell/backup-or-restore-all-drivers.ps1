@@ -1,5 +1,8 @@
+# To allow this script to run, set execution policy for your user:
+# Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+
 # ============================
-# Self-elevating driver backup/restore script (optional ZIP)
+# Driver Backup/Restore Tool - ZIP Only + Skip Existing Drivers
 # ============================
 
 function Test-IsAdmin {
@@ -9,21 +12,20 @@ function Test-IsAdmin {
 }
 
 if (-not (Test-IsAdmin)) {
-    Write-Host "This script needs Administrator privileges. Relaunching..."
-    Start-Process powershell.exe "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    Write-Host "This script needs Administrator privileges. Relaunch as Admin and try again."
     exit
 }
 
-# Set paths
+# Setup paths
 $date = Get-Date -Format "yyyy-MM-dd"
 $desktop = [Environment]::GetFolderPath("Desktop")
 $backupFolder = "$desktop\DriverBackup-$date"
 $zipFile = "$desktop\DriverBackup-$date.zip"
 
-# Menu
+# Main menu
 Write-Host "`n=== DRIVER BACKUP TOOL ==="
 Write-Host "1. Backup ALL installed drivers"
-Write-Host "2. Restore drivers from folder or ZIP"
+Write-Host "2. Restore drivers from ZIP only (skip existing)"
 $choice = Read-Host "Choose an option (1 or 2)"
 
 # ============================
@@ -42,53 +44,76 @@ if ($choice -eq "1") {
         exit
     }
 
-    # Ask user if they want to compress the folder
     $zipChoice = Read-Host "Do you want to compress the backup into a .zip file? (y/N)"
-
     if ($zipChoice -match '^(y|Y)$') {
         try {
-            Write-Host "Compressing to ZIP..."
             Compress-Archive -Path "$backupFolder\*" -DestinationPath $zipFile -Force
             Write-Host "✔ ZIP created at: $zipFile"
         } catch {
-            Write-Warning "❌ Failed to zip drivers: $_"
+            Write-Warning "❌ Failed to compress backup: $_"
         }
     } else {
-        Write-Host "Skipping ZIP compression (you can zip it later manually)."
+        Write-Host "Skipping ZIP compression."
     }
 
-    Write-Host "`n✅ Backup complete!"
+    Write-Host "`n✅ Driver backup complete!"
 }
 
 # ============================
-# RESTORE MODE
+# RESTORE MODE (ZIP ONLY + SKIP INSTALLED)
 # ============================
 elseif ($choice -eq "2") {
-    $restoreSource = Read-Host "Enter full path to folder OR .zip file to restore from"
+    Add-Type -AssemblyName System.Windows.Forms
 
-    if (-not (Test-Path $restoreSource)) {
-        Write-Warning "Path does not exist. Please check and try again."
+    # ZIP file picker
+    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Title = "Select driver backup ZIP file"
+    $dialog.Filter = "ZIP files (*.zip)|*.zip"
+    $dialog.Multiselect = $false
+
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+        Write-Host "No ZIP file selected. Aborting."
         exit
     }
 
-    $workingPath = ""
+    $zipPath = $dialog.FileName
 
-    if ($restoreSource -like "*.zip") {
-        $tempPath = Join-Path $env:TEMP "DriverRestore-$date"
-        Write-Host "Extracting ZIP to temp folder: $tempPath"
-        Expand-Archive -Path $restoreSource -DestinationPath $tempPath -Force
-        $workingPath = $tempPath
-    } else {
-        $workingPath = $restoreSource
+    if (-not (Test-Path $zipPath)) {
+        Write-Warning "Selected file doesn't exist. Aborting."
+        exit
     }
 
-    $driverFiles = Get-ChildItem -Path $workingPath -Recurse -Include *.inf
+    # Extract ZIP to temp folder
+    $tempPath = Join-Path $env:TEMP "DriverRestore-$date"
+    Write-Host "Extracting ZIP to temporary folder: $tempPath"
+    try {
+        Expand-Archive -Path $zipPath -DestinationPath $tempPath -Force
+    } catch {
+        Write-Warning "❌ Failed to extract ZIP file: $_"
+        exit
+    }
+
+    # Get installed driver INF names
+    Write-Host "Scanning installed drivers..."
+    $installedDrivers = pnputil /enum-drivers | Select-String "Published Name" | ForEach-Object {
+        ($_ -split ":\s+")[1].Trim().ToLower()
+    }
+
+    # Find and install .inf drivers from extracted content
+    $driverFiles = Get-ChildItem -Path $tempPath -Recurse -Include *.inf
     if ($driverFiles.Count -eq 0) {
-        Write-Warning "No .inf driver files found. Aborting restore."
+        Write-Warning "No .inf files found in the extracted ZIP. Aborting."
         exit
     }
 
     foreach ($file in $driverFiles) {
+        $infName = Split-Path $file.FullName -Leaf
+
+        if ($installedDrivers -contains $infName.ToLower()) {
+            Write-Host "Skipping already installed driver: $infName"
+            continue
+        }
+
         Write-Host "Installing: $($file.FullName)"
         try {
             pnputil /add-driver "$($file.FullName)" /install
@@ -97,7 +122,7 @@ elseif ($choice -eq "2") {
         }
     }
 
-    Write-Host "`n✅ Restore complete!"
+    Write-Host "`n✅ Driver restore complete!"
 }
 
 # ============================
