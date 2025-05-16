@@ -1,15 +1,21 @@
-# Scripts
+# 🛠️ Makeea's Script Collection
 
-Scripts for everyone <br> <br>
+Welcome! This is a personal collection of useful scripts—simple tools for everyday tech tasks.  
+Designed to be **easy to run**, even for beginners. All scripts are open and can be customized to your needs.
 
-Scripts are for everyday people to get that one thing done. <br> <br>
+---
 
-https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-update.sh
+## 📂 Repository Structure
 
-update server <br>
+- `linux/` – Bash scripts for Ubuntu/Debian systems, Proxmox, Docker, Portainer, Git setup, and more.
+- `batch/` – Windows `.bat` scripts like clearing print queues or silent file copying.
+- `pihole.md` – Notes and setup for Pi-hole ad-blocking.
+
+---
+
+## 🔧 Example Usage
+
+### 🚀 Update an Ubuntu Server
+
+```bash
 curl -L https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-update.sh | bash
-
-<br> <br>
-
-copy ssh keys back to local <br>
-ssh-import-id-gh <username>
