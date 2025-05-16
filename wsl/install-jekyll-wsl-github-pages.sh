@@ -1,75 +1,91 @@
 #!/bin/bash
 
-# -------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 # install-jekyll-wsl-github-pages.sh
-# Full setup of Jekyll with GitHub Pages on Ubuntu WSL
-# Creates site using: jekyll new myblog and serves it at localhost:4000
-# -------------------------------------------------------------------------
+# Sets up Jekyll + GitHub Pages on Ubuntu WSL using Ruby 2.7.8 via rbenv
+# -----------------------------------------------------------------------------
 
-echo "[*] Starting Jekyll + GitHub Pages installer for WSL..."
+echo "[*] Starting full Jekyll + GitHub Pages install for WSL (Ruby 2.7.8)..."
 
-# Check for Ruby
-if ! command -v ruby &> /dev/null; then
-    echo "[*] Ruby not found. Installing Ruby and build tools..."
-    sudo apt update
-    sudo apt install -y ruby-full build-essential zlib1g-dev
+# Install dependencies
+echo "[*] Installing system packages..."
+sudo apt update
+sudo apt install -y git curl libssl-dev libreadline-dev zlib1g-dev build-essential autoconf bison libyaml-dev libncurses5-dev libffi-dev libgdbm-dev
+
+# Install rbenv
+if [ ! -d "$HOME/.rbenv" ]; then
+    echo "[*] Installing rbenv..."
+    git clone https://github.com/rbenv/rbenv.git ~/.rbenv
+    cd ~/.rbenv && src/configure && make -C src
+    echo 'export PATH="$HOME/.rbenv/bin:$PATH"' >> ~/.bashrc
+    echo 'eval "$(rbenv init - bash)"' >> ~/.bashrc
+    export PATH="$HOME/.rbenv/bin:$PATH"
+    eval "$(rbenv init - bash)"
 else
-    echo "[✓] Ruby is already installed."
+    echo "[✓] rbenv already installed."
+    export PATH="$HOME/.rbenv/bin:$PATH"
+    eval "$(rbenv init - bash)"
 fi
 
-# Check for Git
-if ! command -v git &> /dev/null; then
-    echo "[*] Git not found. Installing Git..."
-    sudo apt install -y git
+# Install ruby-build
+if [ ! -d "$HOME/.rbenv/plugins/ruby-build" ]; then
+    echo "[*] Installing ruby-build plugin..."
+    git clone https://github.com/rbenv/ruby-build.git ~/.rbenv/plugins/ruby-build
 else
-    echo "[✓] Git is already installed."
+    echo "[✓] ruby-build already installed."
 fi
 
-# Add GEM_HOME and PATH if not already set in .bashrc
-if ! grep -q 'GEM_HOME="\$HOME/gems"' ~/.bashrc; then
-    echo "[*] Configuring RubyGems environment in ~/.bashrc..."
-    echo '# Install Ruby Gems to ~/gems' >> ~/.bashrc
-    echo 'export GEM_HOME="$HOME/gems"' >> ~/.bashrc
-    echo 'export PATH="$HOME/gems/bin:$PATH"' >> ~/.bashrc
+# Install Ruby 2.7.8 if not already installed
+if ! rbenv versions | grep -q "2.7.8"; then
+    echo "[*] Installing Ruby 2.7.8..."
+    rbenv install 2.7.8
 else
-    echo "[✓] RubyGems config already exists in ~/.bashrc"
+    echo "[✓] Ruby 2.7.8 already installed."
 fi
 
-# Apply environment to current shell session
-export GEM_HOME="$HOME/gems"
-export PATH="$HOME/gems/bin:$PATH"
+# Set Ruby 2.7.8 as global
+rbenv global 2.7.8
+rbenv rehash
 
-echo "[*] Applying environment config..."
-source ~/.bashrc
+# Install bundler and github-pages gems
+echo "[*] Installing Bundler and GitHub Pages gems..."
+gem install bundler
+gem install github-pages
+rbenv rehash
 
-# Install bundler if not already available
-if ! command -v bundle &> /dev/null; then
-    echo "[*] Installing Bundler..."
-    gem install bundler
-else
-    echo "[✓] Bundler is already installed."
-fi
-
-# Install Jekyll and GitHub Pages gems
-if ! command -v jekyll &> /dev/null; then
-    echo "[*] Installing Jekyll and GitHub Pages gem..."
-    gem install jekyll github-pages
-else
-    echo "[✓] Jekyll is already installed."
-fi
-
-# Create new Jekyll site if it doesn't exist
+# Create Jekyll site if not exists
 SITE_DIR="$HOME/myblog"
 if [ ! -d "$SITE_DIR" ]; then
-    echo "[*] Creating new Jekyll site at: $SITE_DIR"
+    echo "[*] Creating Jekyll site: $SITE_DIR"
     jekyll new "$SITE_DIR"
 else
-    echo "[✓] Site already exists at: $SITE_DIR"
+    echo "[✓] Jekyll site already exists at $SITE_DIR"
 fi
 
-# Move into the site directory
+# Change into site directory
 cd "$SITE_DIR"
 
-# Start the Jekyll server bound to 127.0.0.1 (localhost)
-echo "[*] Starting the Jekyll server at http://localhost:4000"
+# Info message before starting server
+echo ""
+echo "✅ Your Jekyll site is ready!"
+echo ""
+echo "📍 SITE DIRECTORY:"
+echo "   $SITE_DIR"
+echo ""
+echo "▶ TO SERVE THE SITE LOCALLY:"
+echo "   bundle exec jekyll serve --host 127.0.0.1"
+echo ""
+echo "🌐 Then open your browser and go to:"
+echo "   http://localhost:4000"
+echo ""
+echo "🔁 FOR FUTURE PROJECTS:"
+echo "If you clone or copy a Jekyll project that has a Gemfile, run:"
+echo "   bundle install"
+echo "This installs the required gems listed in the Gemfile."
+echo ""
+echo "Then you can run the Jekyll server with:"
+echo "   bundle exec jekyll serve --host 127.0.0.1"
+echo ""
+
+# Start the server
 bundle exec jekyll serve --host 127.0.0.1
