@@ -1,7 +1,7 @@
 # 🛠️ Makeea's Script Collection
 
 Welcome to the official script collection by [Makeea](https://github.com/Makeea).  
-This repo is a personal toolbox of scripts designed to make everyday technical tasks easier for anyone—from beginners to pros.
+This repo is a personal toolbox of scripts designed to make everyday technical tasks easier for anyone from beginners to pros.
 
 ---
 
