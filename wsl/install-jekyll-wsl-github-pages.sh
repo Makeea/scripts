@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # -----------------------------------------------------------------------------
-# install-jekyll-wsl-github-pages.sh
-# Sets up Jekyll + GitHub Pages on Ubuntu WSL using Ruby 2.7.8 via rbenv
+# install-jekyll-latest.sh
+# Installs the latest version of Ruby (3.2.x), Jekyll, and Bundler for Ubuntu WSL
 # -----------------------------------------------------------------------------
 
-echo "[*] Starting full Jekyll + GitHub Pages install for WSL (Ruby 2.7.8)..."
+echo "[*] Starting Jekyll installation with Ruby 3.2.x..."
 
 # Install dependencies
 sudo apt update
@@ -34,23 +34,25 @@ else
     echo "[✓] ruby-build already installed."
 fi
 
-# Install Ruby 2.7.8 if it's not already installed
-if ! rbenv versions | grep -q "2.7.8"; then
-    rbenv install 2.7.8
-fi
-
-rbenv global 2.7.8
+# Install the latest stable Ruby version (3.2.x)
+echo "[*] Installing Ruby 3.2.x..."
+rbenv install 3.2.0
+rbenv global 3.2.0
 rbenv rehash
 
-# Install Bundler 2.4.22 (compatible with Ruby 2.7.8)
-echo "[*] Installing Bundler (version 2.4.22)..."
-gem install bundler -v 2.4.22
+# Install Bundler (latest version)
+echo "[*] Installing Bundler..."
+gem install bundler
 rbenv rehash
 
-# Install GitHub Pages gem
-echo "[*] Installing GitHub Pages gem..."
-gem install github-pages
+# Install the latest version of Jekyll
+echo "[*] Installing the latest version of Jekyll..."
+gem install jekyll
 rbenv rehash
+
+# Verify Jekyll installation
+echo "[*] Verifying Jekyll installation..."
+jekyll -v
 
 # Create Jekyll site if not exists
 SITE_DIR="$HOME/myblog"
@@ -90,6 +92,10 @@ echo "   bundle install"
 echo "Then run:"
 echo "   bundle exec jekyll serve --host 127.0.0.1 --watch"
 echo ""
+
+# Reload the shell environment to apply changes
+echo "[*] Reloading shell environment..."
+source ~/.bashrc
 
 # Serve the site with live reload
 bundle exec jekyll serve --host 127.0.0.1 --watch
