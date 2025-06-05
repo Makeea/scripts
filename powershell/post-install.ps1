@@ -382,6 +382,125 @@ function Install-PrusaSlicer { Install-SingleApp -AppName "PrusaSlicer" -WingetI
 function Install-Tabby { Install-SingleApp -AppName "Tabby" -WingetID "Eugeny.Tabby" }
 
 #=============================================================================
+# WINDOWS CUSTOMIZATION FUNCTIONS
+#=============================================================================
+
+function Enable-ClassicRightClick {
+    Write-Log "`n=== Enabling Classic Right-Click Menu ===" "INFO"
+    
+    try {
+        # Check current state
+        $currentValue = Get-ItemProperty -Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" -Name "(Default)" -ErrorAction SilentlyContinue
+        
+        if ($currentValue) {
+            Write-Log "Classic right-click menu is already enabled!" "SUCCESS"
+            return
+        }
+        
+        Write-Log "Configuring registry for classic context menu..."
+        
+        # Create the registry path if it doesn't exist
+        $regPath = "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
+        
+        if (!(Test-Path $regPath)) {
+            New-Item -Path $regPath -Force | Out-Null
+        }
+        
+        # Set the default value to empty string to enable classic menu
+        Set-ItemProperty -Path $regPath -Name "(Default)" -Value "" -Force
+        
+        Write-Log "Classic right-click menu enabled successfully!" "SUCCESS"
+        Write-Log "You need to restart Explorer or log off/on for changes to take effect." "INFO"
+        
+        # Offer to restart Explorer
+        $restart = Read-Host "Would you like to restart Explorer now? (Y/N)"
+        if ($restart -eq "Y" -or $restart -eq "y") {
+            Write-Log "Restarting Explorer..."
+            Stop-Process -Name explorer -Force
+            Start-Sleep -Seconds 2
+            Start-Process explorer
+            Write-Log "Explorer restarted successfully!" "SUCCESS"
+        }
+    }
+    catch {
+        Write-Log "Failed to enable classic right-click menu: $($_)" "ERROR"
+    }
+}
+
+function Enable-TaskbarEndTask {
+    Write-Log "`n=== Enabling End Task in Taskbar Right-Click ===" "INFO"
+    
+    try {
+        # Registry path for the End Task feature
+        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings"
+        
+        # Check if already enabled
+        $currentValue = Get-ItemProperty -Path $regPath -Name "TaskbarEndTask" -ErrorAction SilentlyContinue
+        
+        if ($currentValue -and $currentValue.TaskbarEndTask -eq 1) {
+            Write-Log "End Task in taskbar is already enabled!" "SUCCESS"
+            return
+        }
+        
+        Write-Log "Configuring registry for End Task in taskbar..."
+        
+        # Create the registry path if it doesn't exist
+        if (!(Test-Path $regPath)) {
+            New-Item -Path $regPath -Force | Out-Null
+        }
+        
+        # Enable End Task in taskbar (DWORD value = 1)
+        Set-ItemProperty -Path $regPath -Name "TaskbarEndTask" -Value 1 -Type DWord -Force
+        
+        Write-Log "End Task in taskbar enabled successfully!" "SUCCESS"
+        Write-Log "You need to restart Explorer or log off/on for changes to take effect." "INFO"
+        
+        # Offer to restart Explorer
+        $restart = Read-Host "Would you like to restart Explorer now? (Y/N)"
+        if ($restart -eq "Y" -or $restart -eq "y") {
+            Write-Log "Restarting Explorer..."
+            Stop-Process -Name explorer -Force
+            Start-Sleep -Seconds 2
+            Start-Process explorer
+            Write-Log "Explorer restarted successfully!" "SUCCESS"
+        }
+    }
+    catch {
+        Write-Log "Failed to enable End Task in taskbar: $($_)" "ERROR"
+    }
+}
+
+function Disable-ClassicRightClick {
+    Write-Log "`n=== Restoring Windows 11 Right-Click Menu ===" "INFO"
+    
+    try {
+        $regPath = "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}"
+        
+        if (Test-Path $regPath) {
+            Remove-Item -Path $regPath -Recurse -Force
+            Write-Log "Windows 11 right-click menu restored successfully!" "SUCCESS"
+            Write-Log "You need to restart Explorer or log off/on for changes to take effect." "INFO"
+            
+            # Offer to restart Explorer
+            $restart = Read-Host "Would you like to restart Explorer now? (Y/N)"
+            if ($restart -eq "Y" -or $restart -eq "y") {
+                Write-Log "Restarting Explorer..."
+                Stop-Process -Name explorer -Force
+                Start-Sleep -Seconds 2
+                Start-Process explorer
+                Write-Log "Explorer restarted successfully!" "SUCCESS"
+            }
+        }
+        else {
+            Write-Log "Windows 11 right-click menu is already active!" "SUCCESS"
+        }
+    }
+    catch {
+        Write-Log "Failed to restore Windows 11 right-click menu: $($_)" "ERROR"
+    }
+}
+
+#=============================================================================
 # BULK OPERATIONS
 #=============================================================================
 
@@ -417,6 +536,10 @@ function Install-Everything {
     Enable-WindowsSandbox
     Enable-HyperV
     Install-WSL2
+    
+    # Windows customizations
+    Enable-ClassicRightClick
+    Enable-TaskbarEndTask
     
     # Install browsers
     Install-ChromeEnterprise
@@ -461,35 +584,39 @@ function Show-Menu {
     Write-Host " 2.  Enable Hyper-V" -ForegroundColor White
     Write-Host " 3.  Install WSL2 with Ubuntu" -ForegroundColor White
     Write-Host ""
+    Write-Host "WINDOWS CUSTOMIZATIONS:" -ForegroundColor Yellow
+    Write-Host " 4.  Enable Classic Right-Click Menu" -ForegroundColor White
+    Write-Host " 5.  Enable End Task in Taskbar" -ForegroundColor White
+    Write-Host ""
     Write-Host "BROWSERS:" -ForegroundColor Yellow
-    Write-Host " 4.  Install Chrome Enterprise" -ForegroundColor White
-    Write-Host " 5.  Install Mozilla Firefox" -ForegroundColor White
+    Write-Host " 6.  Install Chrome Enterprise" -ForegroundColor White
+    Write-Host " 7.  Install Mozilla Firefox" -ForegroundColor White
     Write-Host ""
     Write-Host "ESSENTIAL APPLICATIONS:" -ForegroundColor Yellow
-    Write-Host " 6.  Install 7-Zip" -ForegroundColor White
-    Write-Host " 7.  Install BCUninstaller" -ForegroundColor White
-    Write-Host " 8.  Install Bulk Rename Utility" -ForegroundColor White
-    Write-Host " 9.  Install CPU-Z" -ForegroundColor White
-    Write-Host " 10. Install File Converter" -ForegroundColor White
-    Write-Host " 11. Install Git" -ForegroundColor White
-    Write-Host " 12. Install Git Extensions" -ForegroundColor White
-    Write-Host " 13. Install Google Chrome" -ForegroundColor White
-    Write-Host " 14. Install Krita" -ForegroundColor White
-    Write-Host " 15. Install Logi Options+" -ForegroundColor White
-    Write-Host " 16. Install Mozilla Firefox" -ForegroundColor White
-    Write-Host " 17. Install Notepad++" -ForegroundColor White
-    Write-Host " 18. Install OpenSCAD" -ForegroundColor White
-    Write-Host " 19. Install VirtualBox" -ForegroundColor White
-    Write-Host " 20. Install PeaZip" -ForegroundColor White
-    Write-Host " 21. Install PrusaSlicer" -ForegroundColor White
-    Write-Host " 22. Install Tabby" -ForegroundColor White
+    Write-Host " 8.  Install 7-Zip" -ForegroundColor White
+    Write-Host " 9.  Install BCUninstaller" -ForegroundColor White
+    Write-Host " 10. Install Bulk Rename Utility" -ForegroundColor White
+    Write-Host " 11. Install CPU-Z" -ForegroundColor White
+    Write-Host " 12. Install File Converter" -ForegroundColor White
+    Write-Host " 13. Install Git" -ForegroundColor White
+    Write-Host " 14. Install Git Extensions" -ForegroundColor White
+    Write-Host " 15. Install Google Chrome" -ForegroundColor White
+    Write-Host " 16. Install Krita" -ForegroundColor White
+    Write-Host " 17. Install Logi Options+" -ForegroundColor White
+    Write-Host " 18. Install Mozilla Firefox" -ForegroundColor White
+    Write-Host " 19. Install Notepad++" -ForegroundColor White
+    Write-Host " 20. Install OpenSCAD" -ForegroundColor White
+    Write-Host " 21. Install VirtualBox" -ForegroundColor White
+    Write-Host " 22. Install PeaZip" -ForegroundColor White
+    Write-Host " 23. Install PrusaSlicer" -ForegroundColor White
+    Write-Host " 24. Install Tabby" -ForegroundColor White
     Write-Host ""
     Write-Host "BULK OPERATIONS:" -ForegroundColor Green
-    Write-Host " 23. Update All Apps via Winget" -ForegroundColor White
+    Write-Host " 25. Update All Apps via Winget" -ForegroundColor White
     Write-Host ""
-    Write-Host " 24. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
+    Write-Host " 26. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
     Write-Host ""
-    Write-Host " 25. Exit" -ForegroundColor Red
+    Write-Host " 27. Exit" -ForegroundColor Red
     Write-Host ""
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "Log file: $script:LogPath" -ForegroundColor Gray
@@ -504,49 +631,51 @@ function Start-MainMenu {
     
     do {
         Show-Menu
-        $choice = Read-Host "Enter your choice (1-25)"
+        $choice = Read-Host "Enter your choice (1-27)"
         
         switch ($choice) {
             "1"  { Enable-WindowsSandbox; Pause }
             "2"  { Enable-HyperV; Pause }
             "3"  { Install-WSL2; Pause }
-            "4"  { Install-ChromeEnterprise; Pause }
-            "5"  { Install-Firefox; Pause }
-            "6"  { Install-7Zip; Pause }
-            "7"  { Install-BCUninstaller; Pause }
-            "8"  { Install-BulkRenameUtility; Pause }
-            "9"  { Install-CPUZ; Pause }
-            "10" { Install-FileConverter; Pause }
-            "11" { Install-Git; Pause }
-            "12" { Install-GitExtensions; Pause }
-            "13" { Install-GoogleChrome; Pause }
-            "14" { Install-Krita; Pause }
-            "15" { Install-LogiOptionsPlus; Pause }
-            "16" { Install-MozillaFirefox; Pause }
-            "17" { Install-NotepadPlusPlus; Pause }
-            "18" { Install-OpenSCAD; Pause }
-            "19" { Install-VirtualBox; Pause }
-            "20" { Install-PeaZip; Pause }
-            "21" { Install-PrusaSlicer; Pause }
-            "22" { Install-Tabby; Pause }
-            "23" { Update-AllApps; Pause }
-            "24" { 
+            "4"  { Enable-ClassicRightClick; Pause }
+            "5"  { Enable-TaskbarEndTask; Pause }
+            "6"  { Install-ChromeEnterprise; Pause }
+            "7"  { Install-Firefox; Pause }
+            "8"  { Install-7Zip; Pause }
+            "9"  { Install-BCUninstaller; Pause }
+            "10" { Install-BulkRenameUtility; Pause }
+            "11" { Install-CPUZ; Pause }
+            "12" { Install-FileConverter; Pause }
+            "13" { Install-Git; Pause }
+            "14" { Install-GitExtensions; Pause }
+            "15" { Install-GoogleChrome; Pause }
+            "16" { Install-Krita; Pause }
+            "17" { Install-LogiOptionsPlus; Pause }
+            "18" { Install-MozillaFirefox; Pause }
+            "19" { Install-NotepadPlusPlus; Pause }
+            "20" { Install-OpenSCAD; Pause }
+            "21" { Install-VirtualBox; Pause }
+            "22" { Install-PeaZip; Pause }
+            "23" { Install-PrusaSlicer; Pause }
+            "24" { Install-Tabby; Pause }
+            "25" { Update-AllApps; Pause }
+            "26" { 
                 $confirm = Read-Host "This will install everything. Continue? (Y/N)"
                 if ($confirm -eq "Y" -or $confirm -eq "y") {
                     Install-Everything
                 }
                 Pause
             }
-            "25" { 
+            "27" { 
                 Write-Log "Exiting script..." "INFO"
                 break 
             }
             default { 
-                Write-Host "Invalid choice. Please select 1-25." -ForegroundColor Red
+                Write-Host "Invalid choice. Please select 1-27." -ForegroundColor Red
                 Start-Sleep -Seconds 2
             }
         }
-    } while ($choice -ne "25")
+    } while ($choice -ne "27")
 }
 
 function Pause {
