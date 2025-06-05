@@ -1,7 +1,7 @@
 # WSL Management Script for Windows 11 24H2
 # Author: Claire Rosario
 # Created: June 4, 2025
-# Version: 1.3
+# Version: 1.4
 #
 # This script will automatically install/manage Windows Subsystem for Linux (WSL) 
 # with your choice of Linux distribution on your Windows 11 computer.
@@ -35,6 +35,12 @@
 # powershell -ExecutionPolicy Bypass -File .\wsl-installer.ps1 -Action "View"
 #
 # CHANGE LOG
+# Version 1.4 - June 4, 2025 - Added comprehensive cleanup functionality
+# - Added complete removal of ALL Linux distributions (Ubuntu, Debian, Kali, SUSE, etc.)
+# - Enhanced WSL removal to clean all Linux-related files and integrations
+# - Improved system cleanup to ensure no Linux distribution remnants remain
+# - Added Windows Apps integration cleanup for all distributions
+#
 # Version 1.3 - June 4, 2025 - Added WSL management and uninstall features
 # - Added main menu with Install/Uninstall/View options
 # - Added ability to uninstall individual Linux distributions
@@ -43,38 +49,39 @@
 # - Enhanced user experience with comprehensive WSL management
 # - Fixed distribution parsing and added menu loop functionality
 #
-# Version 1.2 - June 4, 2025 - Added dynamic distribution fetching
+# Version 1.2 - June 3, 2025 - Added dynamic distribution fetching
 # - Script now queries WSL for latest available distributions in real-time
 # - Automatically stays up-to-date with Microsoft's official distribution list
 # - Keeps hardcoded fallback list in case WSL query fails
 # - Improved menu with both technical names and friendly descriptions
 #
-# Version 1.1 - June 4, 2025 - Added distribution selection menu
+# Version 1.1 - June 2, 2025 - Added distribution selection menu
 # - Added interactive menu to choose from 13 available Linux distributions
 # - Default remains Ubuntu LTS (latest) for simplicity
 # - Added support for Ubuntu variants, AlmaLinux, Oracle Linux, SUSE, Debian, Kali
 # - Updated parameter handling to work with distribution selection
 #
-# Version 1.0 - June 4, 2025 - Initial script creation
+# Version 1.0 - June 1, 2025 - Initial script creation
 
-# Script parameters
 param(
     [switch]$Force,
     [string]$Distribution = "",
     [string]$Action = ""
 )
 
-# Helper Functions
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
 
-# Check if PowerShell is running with Administrator privileges
 function Test-Administrator {
+    # Check if PowerShell is running with Administrator privileges
     $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
-# Print colored text to make output easier to read
 function Write-ColorOutput {
+    # Print colored text to make output easier to read
     param(
         [string]$Message,
         [string]$Color = "White"
@@ -82,8 +89,8 @@ function Write-ColorOutput {
     Write-Host $Message -ForegroundColor $Color
 }
 
-# Check if WSL is already working
 function Test-WSLInstallation {
+    # Check if WSL is already working
     try {
         $wslOutput = wsl --status 2>$null
         if ($LASTEXITCODE -eq 0) {
@@ -95,8 +102,8 @@ function Test-WSLInstallation {
     return $false
 }
 
-# Check if a Linux distribution is installed
 function Test-DistributionInstalled {
+    # Check if a Linux distribution is installed
     param([string]$DistName)
     try {
         $distributions = wsl --list --quiet 2>$null
@@ -109,8 +116,8 @@ function Test-DistributionInstalled {
     return $false
 }
 
-# Check if a Linux distribution is set up and ready to use
 function Test-DistributionSetup {
+    # Check if a Linux distribution is set up and ready to use
     param([string]$DistName)
     try {
         $result = wsl -d $DistName -e echo "test" 2>$null
@@ -123,8 +130,12 @@ function Test-DistributionSetup {
     return $false
 }
 
-# Get latest available distributions from WSL
+# =============================================================================
+# DISTRIBUTION MANAGEMENT FUNCTIONS
+# =============================================================================
+
 function Get-LatestDistributions {
+    # Get latest available distributions from WSL
     Write-ColorOutput "Fetching latest distribution list from Microsoft..." "Cyan"
     
     try {
@@ -187,8 +198,8 @@ function Get-LatestDistributions {
     return Get-FallbackDistributions
 }
 
-# Fallback distribution list (in case WSL query fails)
 function Get-FallbackDistributions {
+    # Fallback distribution list (in case WSL query fails)
     return @{
         "1" = @{ Name = "Ubuntu"; FriendlyName = "Ubuntu (Latest LTS - Recommended)" }
         "2" = @{ Name = "Ubuntu-24.04"; FriendlyName = "Ubuntu 24.04 LTS" }
@@ -206,8 +217,121 @@ function Get-FallbackDistributions {
     }
 }
 
-# Show distribution selection menu
+function Get-InstalledDistributions {
+    # Get list of installed WSL distributions
+    try {
+        $wslOutput = wsl --list --verbose 2>$null
+        $distributions = @{}
+        $counter = 1
+        
+        if ($LASTEXITCODE -eq 0 -and $wslOutput) {
+            foreach ($line in $wslOutput) {
+                # Skip header lines, empty lines, and dashes
+                if ($line -match "^\s*NAME\s+STATE\s+VERSION" -or 
+                    [string]::IsNullOrWhiteSpace($line) -or
+                    $line -match "^-+" -or
+                    $line.Trim() -eq "" -or
+                    $line -match "Windows Subsystem for Linux") {
+                    continue
+                }
+                
+                # Remove any extra whitespace and handle different formats
+                $cleanLine = $line.Trim()
+                
+                # Handle lines that might have Unicode or special characters
+                $cleanLine = $cleanLine -replace '[^\x20-\x7E]', ' '  # Replace non-ASCII with spaces
+                $cleanLine = $cleanLine -replace '\s+', ' '           # Normalize whitespace
+                
+                # Skip if line is too short or doesn't contain useful info
+                if ($cleanLine.Length -lt 3) {
+                    continue
+                }
+                
+                # Split the line into parts
+                $parts = $cleanLine -split '\s+'
+                
+                # Filter out empty parts
+                $parts = $parts | Where-Object { $_ -ne "" -and $_ -ne " " }
+                
+                if ($parts.Count -ge 1) {
+                    $isDefault = $false
+                    $nameIndex = 0
+                    
+                    # Check if first part is the default marker
+                    if ($parts[0] -eq "*") {
+                        $isDefault = $true
+                        $nameIndex = 1
+                    }
+                    
+                    # Make sure we have a name
+                    if ($parts.Count -gt $nameIndex) {
+                        $name = $parts[$nameIndex]
+                        $state = if ($parts.Count -gt $nameIndex + 1) { $parts[$nameIndex + 1] } else { "Unknown" }
+                        $version = if ($parts.Count -gt $nameIndex + 2) { $parts[$nameIndex + 2] } else { "2" }
+                        
+                        # Only add if name is valid
+                        if (![string]::IsNullOrWhiteSpace($name) -and 
+                            $name -ne "*" -and 
+                            $name -ne "NAME" -and
+                            $name.Length -gt 1) {
+                            
+                            $distributions[$counter.ToString()] = @{
+                                Name = $name
+                                State = $state
+                                Version = $version
+                                IsDefault = $isDefault
+                            }
+                            $counter++
+                        }
+                    }
+                }
+            }
+        }
+        
+        # Debug output to help troubleshoot
+        if ($distributions.Count -eq 0) {
+            Write-ColorOutput "Debug: No distributions parsed. Raw WSL output:" "Yellow"
+            $wslOutput | ForEach-Object { Write-ColorOutput "  '$_'" "Gray" }
+        }
+        
+        return $distributions
+    } catch {
+        Write-ColorOutput "Error parsing WSL distributions: $($_.Exception.Message)" "Red"
+        return @{}
+    }
+}
+
+# =============================================================================
+# MENU DISPLAY FUNCTIONS
+# =============================================================================
+
+function Show-MainMenu {
+    # Show main action menu
+    Write-ColorOutput ""
+    Write-ColorOutput "WSL Management Options:" "Green"
+    Write-ColorOutput "=====================" "Green"
+    Write-ColorOutput "1. Install new Linux distribution" "White"
+    Write-ColorOutput "2. Uninstall existing distribution" "White"
+    Write-ColorOutput "3. View installed distributions" "White"
+    Write-ColorOutput "4. Completely remove WSL from system" "Red"
+    Write-ColorOutput ""
+    Write-ColorOutput "Enter your choice (1-4): " "Cyan" -NoNewline
+    $choice = Read-Host
+    
+    switch ($choice) {
+        "1" { return "Install" }
+        "2" { return "Uninstall" }
+        "3" { return "View" }
+        "4" { return "RemoveWSL" }
+        default { 
+            Write-ColorOutput "Invalid choice. Defaulting to Install." "Yellow"
+            return "Install" 
+        }
+    }
+}
+
 function Show-DistributionMenu {
+    # Show distribution selection menu
     Write-ColorOutput ""
     
     # Get the latest distributions (either from WSL or fallback)
@@ -245,92 +369,8 @@ function Show-DistributionMenu {
     }
 }
 
-# Get list of installed WSL distributions
-function Get-InstalledDistributions {
-    try {
-        $wslOutput = wsl --list --verbose 2>$null
-        $distributions = @{}
-        $counter = 1
-        
-        if ($LASTEXITCODE -eq 0 -and $wslOutput) {
-            foreach ($line in $wslOutput) {
-                # Skip header lines, empty lines, and dashes
-                if ($line -match "^\s*NAME\s+STATE\s+VERSION" -or 
-                    [string]::IsNullOrWhiteSpace($line) -or
-                    $line -match "^-+" -or
-                    $line.Trim() -eq "") {
-                    continue
-                }
-                
-                # Clean the line and split by whitespace
-                $cleanLine = $line.Trim() -replace '\s+', ' '
-                $parts = $cleanLine -split '\s+'
-                
-                # We need at least 3 parts: [*]Name State [Version]
-                if ($parts.Count -ge 2) {
-                    $isDefault = $false
-                    $nameIndex = 0
-                    
-                    # Check if first part is the default marker
-                    if ($parts[0] -eq "*") {
-                        $isDefault = $true
-                        $nameIndex = 1
-                    }
-                    
-                    # Make sure we have enough parts after accounting for the asterisk
-                    if ($parts.Count -gt $nameIndex + 1) {
-                        $name = $parts[$nameIndex]
-                        $state = $parts[$nameIndex + 1]
-                        $version = if ($parts.Count -gt $nameIndex + 2) { $parts[$nameIndex + 2] } else { "2" }
-                        
-                        # Only add if name is valid and not empty
-                        if (![string]::IsNullOrWhiteSpace($name) -and $name -ne "*" -and $name -ne "NAME") {
-                            $distributions[$counter.ToString()] = @{
-                                Name = $name
-                                State = $state
-                                Version = $version
-                                IsDefault = $isDefault
-                            }
-                            $counter++
-                        }
-                    }
-                }
-            }
-        }
-        return $distributions
-    } catch {
-        Write-ColorOutput "Error parsing WSL distributions: $($_.Exception.Message)" "Red"
-        return @{}
-    }
-}
-
-# Show main action menu
-function Show-MainMenu {
-    Write-ColorOutput ""
-    Write-ColorOutput "WSL Management Options:" "Green"
-    Write-ColorOutput "=====================" "Green"
-    Write-ColorOutput "1. Install new Linux distribution" "White"
-    Write-ColorOutput "2. Uninstall existing distribution" "White"
-    Write-ColorOutput "3. View installed distributions" "White"
-    Write-ColorOutput "4. Completely remove WSL from system" "Red"
-    Write-ColorOutput ""
-    Write-ColorOutput "Enter your choice (1-4): " "Cyan" -NoNewline
-    $choice = Read-Host
-    
-    switch ($choice) {
-        "1" { return "Install" }
-        "2" { return "Uninstall" }
-        "3" { return "View" }
-        "4" { return "RemoveWSL" }
-        default { 
-            Write-ColorOutput "Invalid choice. Defaulting to Install." "Yellow"
-            return "Install" 
-        }
-    }
-}
-
-# Show installed distributions
 function Show-InstalledDistributions {
+    # Show installed distributions
     $installed = Get-InstalledDistributions
     
     if ($installed.Count -eq 0) {
@@ -358,8 +398,8 @@ function Show-InstalledDistributions {
     return $installed
 }
 
-# Uninstall distribution menu
 function Show-UninstallMenu {
+    # Uninstall distribution menu
     $installed = Show-InstalledDistributions
     
     if ($installed -eq $null -or $installed.Count -eq 0) {
@@ -380,13 +420,44 @@ function Show-UninstallMenu {
     }
 }
 
-# Uninstall a specific distribution
+# =============================================================================
+# UNINSTALL FUNCTIONS
+# =============================================================================
+
 function Uninstall-Distribution {
+    # Uninstall a specific distribution
     param([string]$DistName)
     
     # Check if DistName is empty
     if ([string]::IsNullOrWhiteSpace($DistName)) {
         Write-ColorOutput "Error: No distribution name provided." "Red"
+        return
+    }
+    
+    # Verify the distribution exists before attempting uninstall
+    Write-ColorOutput "Verifying '$DistName' exists..." "Cyan"
+    $verifyOutput = wsl --list --quiet 2>$null
+    $distExists = $false
+    
+    if ($LASTEXITCODE -eq 0 -and $verifyOutput) {
+        foreach ($line in $verifyOutput) {
+            $cleanLine = $line.Trim() -replace '[^\x20-\x7E]', ''
+            if ($cleanLine -eq $DistName -or $cleanLine -eq "* $DistName") {
+                $distExists = $true
+                break
+            }
+        }
+    }
+    
+    if (-not $distExists) {
+        Write-ColorOutput "Error: Distribution '$DistName' not found in WSL." "Red"
+        Write-ColorOutput "Available distributions:" "Yellow"
+        wsl --list --quiet 2>$null | ForEach-Object { 
+            $clean = $_.Trim() -replace '[^\x20-\x7E]', ''
+            if (![string]::IsNullOrWhiteSpace($clean)) {
+                Write-ColorOutput "  $clean" "White"
+            }
+        }
         return
     }
     
@@ -399,11 +470,21 @@ function Uninstall-Distribution {
     if ($confirm -eq "DELETE") {
         Write-ColorOutput "Uninstalling '$DistName'..." "Yellow"
         try {
-            $result = wsl --unregister $DistName 2>&1
+            # Use cmd to ensure proper argument handling
+            $result = cmd /c "wsl --unregister `"$DistName`"" 2>&1
             if ($LASTEXITCODE -eq 0) {
                 Write-ColorOutput "'$DistName' has been successfully removed!" "Green"
             } else {
                 Write-ColorOutput "Failed to remove '$DistName'. Error: $result" "Red"
+                Write-ColorOutput "Trying alternative method..." "Yellow"
+                
+                # Try without quotes
+                $result2 = wsl --unregister $DistName 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-ColorOutput "'$DistName' has been successfully removed!" "Green"
+                } else {
+                    Write-ColorOutput "Alternative method also failed: $result2" "Red"
+                }
             }
         } catch {
             Write-ColorOutput "Error removing '${DistName}': $($_.Exception.Message)" "Red"
@@ -413,8 +494,95 @@ function Uninstall-Distribution {
     }
 }
 
-# Completely remove WSL from system
+function Remove-AllLinuxDistributions {
+    # Remove all Linux distributions and related files from system
+    Write-ColorOutput "Performing comprehensive Linux distribution cleanup..." "Yellow"
+    
+    # Remove all Linux Store apps
+    Write-ColorOutput "Removing Linux Store applications..." "Cyan"
+    try {
+        $linuxApps = Get-AppxPackage | Where-Object { 
+            $_.Name -like "*Ubuntu*" -or 
+            $_.Name -like "*Canonical*" -or 
+            $_.Name -like "*Debian*" -or 
+            $_.Name -like "*Kali*" -or 
+            $_.Name -like "*SUSE*" -or 
+            $_.Name -like "*openSUSE*" -or 
+            $_.Name -like "*AlmaLinux*" -or 
+            $_.Name -like "*Oracle*Linux*" -or
+            $_.Name -like "*RedHat*" -or
+            $_.Name -like "*Fedora*" -or
+            $_.Name -like "*Alpine*" -or
+            $_.Name -like "*Arch*"
+        }
+        foreach ($app in $linuxApps) {
+            Write-ColorOutput "  Removing: $($app.Name)" "White"
+            Remove-AppxPackage -Package $app.PackageFullName -ErrorAction SilentlyContinue
+        }
+        if ($linuxApps.Count -eq 0) {
+            Write-ColorOutput "  No Linux Store apps found" "Gray"
+        }
+    } catch {
+        Write-ColorOutput "  Error removing Store apps: $($_.Exception.Message)" "Red"
+    }
+    
+    # Clean AppData folders for all distributions
+    Write-ColorOutput "Cleaning Linux distribution AppData folders..." "Cyan"
+    $appDataPaths = @(
+        "$env:USERPROFILE\AppData\Local\Packages\*Ubuntu*",
+        "$env:USERPROFILE\AppData\Local\Packages\*Canonical*",
+        "$env:USERPROFILE\AppData\Local\Packages\*Debian*",
+        "$env:USERPROFILE\AppData\Local\Packages\*Kali*",
+        "$env:USERPROFILE\AppData\Local\Packages\*SUSE*",
+        "$env:USERPROFILE\AppData\Local\Packages\*openSUSE*",
+        "$env:USERPROFILE\AppData\Local\Packages\*AlmaLinux*",
+        "$env:USERPROFILE\AppData\Local\Packages\*Oracle*",
+        "$env:USERPROFILE\AppData\Local\Packages\*RedHat*",
+        "$env:USERPROFILE\AppData\Local\Packages\*Fedora*",
+        "$env:USERPROFILE\AppData\Local\Packages\*Alpine*",
+        "$env:USERPROFILE\AppData\Local\Packages\*Arch*",
+        "$env:USERPROFILE\AppData\Local\lxss",
+        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\*ubuntu*",
+        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\*debian*",
+        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\*kali*",
+        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\*suse*",
+        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\*alma*",
+        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\*oracle*",
+        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\*fedora*",
+        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\*alpine*",
+        "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps\*arch*"
+    )
+    
+    foreach ($path in $appDataPaths) {
+        try {
+            $items = Get-ChildItem $path -ErrorAction SilentlyContinue
+            foreach ($item in $items) {
+                Write-ColorOutput "  Removing: $($item.FullName)" "White"
+                Remove-Item $item.FullName -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        } catch {
+            Write-ColorOutput "  Path not found or already clean: $path" "Gray"
+        }
+    }
+    
+    # Remove all Linux executables from Windows Apps
+    Write-ColorOutput "Cleaning Windows Apps integration..." "Cyan"
+    $windowsAppsPath = "$env:USERPROFILE\AppData\Local\Microsoft\WindowsApps"
+    if (Test-Path $windowsAppsPath) {
+        $linuxExePatterns = @("*ubuntu*", "*debian*", "*kali*", "*suse*", "*alma*", "*oracle*", "*fedora*", "*alpine*", "*arch*")
+        foreach ($pattern in $linuxExePatterns) {
+            Get-ChildItem $windowsAppsPath -Filter $pattern -ErrorAction SilentlyContinue | ForEach-Object {
+                Write-ColorOutput "  Removing: $($_.Name)" "White"
+                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    
+    Write-ColorOutput "All Linux distribution cleanup completed" "Green"
+}
+
 function Remove-WSLCompletely {
+    # Completely remove WSL from system
     Write-ColorOutput ""
     Write-ColorOutput "WARNING: COMPLETE WSL REMOVAL" "Red"
     Write-ColorOutput "=============================" "Red"
@@ -432,7 +600,7 @@ function Remove-WSLCompletely {
         Write-ColorOutput ""
         Write-ColorOutput "Removing all WSL distributions..." "Yellow"
         
-        # Get all installed distributions
+        # Get all installed distributions and remove them
         $installed = Get-InstalledDistributions
         foreach ($key in $installed.Keys) {
             $distName = $installed[$key].Name
@@ -440,13 +608,16 @@ function Remove-WSLCompletely {
             wsl --unregister $distName 2>$null
         }
         
+        # Perform comprehensive cleanup of all Linux distributions
+        Remove-AllLinuxDistributions
+        
         Write-ColorOutput "Disabling WSL features..." "Yellow"
         try {
             # Disable WSL features
             dism.exe /online /disable-feature /featurename:Microsoft-Windows-Subsystem-Linux /norestart
             dism.exe /online /disable-feature /featurename:VirtualMachinePlatform /norestart
             
-            Write-ColorOutput "WSL has been completely removed from your system!" "Green"
+            Write-ColorOutput "WSL and all Linux distributions have been completely removed!" "Green"
             Write-ColorOutput "A restart is required to complete the removal." "Yellow"
             
             $restart = Read-Host "Restart now? (y/N)"
@@ -455,19 +626,23 @@ function Remove-WSLCompletely {
                 Start-Sleep -Seconds 5
                 Restart-Computer -Force
             } else {
-                Write-ColorOutput "Please restart your computer manually to complete WSL removal." "Red"
+                Write-ColorOutput "Please restart your computer manually to complete WSL and Linux distribution removal." "Red"
             }
         } catch {
             Write-ColorOutput "Error disabling WSL features: $($_.Exception.Message)" "Red"
             Write-ColorOutput "You may need to disable features manually in Windows Features." "Yellow"
         }
     } else {
-        Write-ColorOutput "WSL removal cancelled." "Yellow"
+        Write-ColorOutput "WSL and Linux distribution removal cancelled." "Yellow"
     }
 }
 
-# Main action handler with menu loop
+# =============================================================================
+# MAIN ACTION HANDLER
+# =============================================================================
+
 function Start-WSLManager {
+    # Main action handler with menu loop
     while ($true) {
         # Select action if not specified
         if ([string]::IsNullOrWhiteSpace($Action)) {
@@ -517,7 +692,10 @@ function Start-WSLManager {
     }
 }
 
-# Main Script
+# =============================================================================
+# MAIN SCRIPT EXECUTION
+# =============================================================================
+
 Clear-Host
 
 Write-ColorOutput "WSL Management Script" "Green"
@@ -561,6 +739,10 @@ if ($actionResult -eq "install") {
     Write-ColorOutput "Proceeding with installation..." "Green"
     Write-ColorOutput ""
 }
+
+# =============================================================================
+# INSTALLATION PROCESS
+# =============================================================================
 
 # Select distribution if not specified
 if ([string]::IsNullOrWhiteSpace($Distribution)) {
@@ -714,7 +896,10 @@ if ($manualInstallNeeded) {
     }
 }
 
-# Installation Complete
+# =============================================================================
+# INSTALLATION COMPLETE
+# =============================================================================
+
 Write-ColorOutput ""
 Write-ColorOutput "Installation Complete!" "Green"
 Write-ColorOutput ""
