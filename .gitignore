@@ -397,4 +397,5 @@ Desktop.ini
 # Add your specific application files here
 # Example:
 # myapp.conf
-# local_settings.py
+# local_settings.py*.DS_Store*
+*Zone.Identifier
