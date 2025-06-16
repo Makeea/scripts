@@ -1,54 +1,56 @@
-#!/bin/sh
+#!/bin/bash
 
-# Script Description:
-# This script updates and upgrades the Ubuntu system, asks the user if they want to upgrade to the latest OS version,
+# Script Name: server-update.sh
+# Description:
+#   Automatically updates and upgrades Ubuntu packages,
+#   removes unnecessary packages, double-checks for pending upgrades,
+#   and reboots the system without prompts.
+# Author: Claire Rosario
+# Date: 2025-06-15
 
-# Function to ask for OS upgrade with a 30-second timeout
-ask_for_os_upgrade() {
-    echo "Do you want to upgrade to the latest OS version? You have 30 seconds to answer. [Y/n]"
-    read -t 30 RESPONSE
+set -euo pipefail
+trap 'echo "Script failed. Please review the output above." >&2' ERR
 
-    if [ "$RESPONSE" = "Y" ] || [ "$RESPONSE" = "y" ]; then
-        echo "Upgrading to the latest OS version..."
-        sudo apt-get dist-upgrade -y
-    else
-        echo "Skipping OS upgrade."
-    fi
-}
+# ----------------------------
+# HOW TO SCHEDULE THIS SCRIPT
+# ----------------------------
+# To run this script every Saturday at 12:00 AM, add this to your crontab:
+#
+#     0 0 * * 6 /absolute/path/to/server-update.sh
+#
+# Edit your crontab with:
+#     crontab -e
+#
+# Make sure the script is executable:
+#     chmod +x /absolute/path/to/server-update.sh
+# ----------------------------
 
-# Ask the user if they want to upgrade to the latest OS version
-ask_for_os_upgrade
+echo ""
+echo "Starting unattended system maintenance..."
 
-# Update package lists
-echo "Updating package lists..."
+# First update and upgrade pass
+echo "Step 1: Updating package lists..."
 sudo apt-get update -y
 
-# Upgrade packages
-echo "Upgrading packages..."
+echo "Step 2: Upgrading installed packages..."
 sudo apt-get upgrade -y
 
-# Remove unnecessary packages
-echo "Removing unnecessary packages..."
+echo "Step 3: Removing unnecessary packages..."
 sudo apt-get autoremove -y
 
-# Final system check for upgradable packages
-echo "Final check for upgradable packages..."
-apt list --upgradable
+# Double-check for remaining updates
+echo "Step 4: Rechecking for pending upgrades..."
+sudo apt-get update -y
+sudo apt-get upgrade -y
+sudo apt-get autoremove -y
 
-# Function to ask for system reboot with a 30-second timeout
-ask_for_reboot() {
-    echo "Do you want to reboot the system now? You have 30 seconds to answer. [Y/n]"
-    read -t 30 REBOOT_RESPONSE
+# Final visibility for admin (non-interactive)
+echo "Step 5: Final check for any remaining upgrades..."
+apt list --upgradable || true
 
-    if [ "$REBOOT_RESPONSE" = "Y" ] || [ "$REBOOT_RESPONSE" = "y" ]; then
-        echo "Rebooting the system..."
-        sudo shutdown -r now
-    else
-        echo "System will not reboot. It's recommended to reboot later for changes to take effect."
-    fi
-}
+# Reboot
+echo "Step 6: Rebooting system to finalize maintenance..."
+sudo shutdown -r now
 
-# Ask the user if they want to reboot the system
-ask_for_reboot
-
-echo "System update and upgrade process completed."
+# This line will only run if reboot fails
+echo "Maintenance complete, but reboot was skipped or failed."
