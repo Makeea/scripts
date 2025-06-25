@@ -2281,13 +2281,14 @@ function Show-Menu {
     Write-Host " 61. Update All Installed Apps via Winget" -ForegroundColor White
     Write-Host " 62. Install All Applications Only" -ForegroundColor White
     Write-Host ""
-    Write-Host " 63. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
+    Write-Host " 999. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
     Write-Host ""
     Write-Host " 64. Exit" -ForegroundColor Red
     Write-Host ""
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "Log file: $script:LogPath" -ForegroundColor Gray
     Write-Host ""
+    Write-Host "Press Enter to exit, or choose an option:" -ForegroundColor Yellow
 }
 
 function Start-MainMenu {
@@ -2298,7 +2299,13 @@ function Start-MainMenu {
     
     do {
         Show-Menu
-        $choice = Read-Host "Enter your choice (1-64)"
+        $choice = Read-Host "Enter your choice (1-64, 999)"
+        
+        # Handle empty input (just Enter key) - exit script
+        if ([string]::IsNullOrWhiteSpace($choice)) {
+            Write-Log "No option selected, exiting script..." "INFO"
+            break
+        }
         
         switch ($choice) {
             # SYSTEM FEATURES (1-3)
@@ -2395,27 +2402,34 @@ function Start-MainMenu {
                 Pause
             }
             
-            # INSTALL EVERYTHING (63)
-            "63" { 
-                $confirm = Read-Host "This will install EVERYTHING (features + apps + optimizations + security). Continue? (Y/N)"
-                if ($confirm -eq "Y" -or $confirm -eq "y") {
-                    Install-Everything
-                }
-                Pause
-            }
-            
             # EXIT (64)
             "64" { 
                 Write-Log "Exiting script..." "INFO"
                 break 
             }
             
+            # INSTALL EVERYTHING (999)
+            "999" { 
+                Write-Host ""
+                Write-Host "⚠️  WARNING: This will install EVERYTHING! ⚠️" -ForegroundColor Red
+                Write-Host "This includes all features, apps, optimizations, and security settings." -ForegroundColor Yellow
+                Write-Host "This process will take a significant amount of time." -ForegroundColor Yellow
+                Write-Host ""
+                $confirm = Read-Host "Are you absolutely sure you want to proceed? Type 'YES' to continue"
+                if ($confirm -eq "YES") {
+                    Install-Everything
+                } else {
+                    Write-Log "Install Everything cancelled by user" "INFO"
+                }
+                Pause
+            }
+            
             default { 
-                Write-Host "Invalid choice. Please select 1-64." -ForegroundColor Red
+                Write-Host "Invalid choice. Please select 1-64 or 999. Press Enter to exit." -ForegroundColor Red
                 Start-Sleep -Seconds 2
             }
         }
-    } while ($choice -ne "64")
+    } while ($choice -ne "64" -and ![string]::IsNullOrWhiteSpace($choice))
 }
 
 function Pause {
