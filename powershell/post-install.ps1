@@ -382,6 +382,1259 @@ function Install-PrusaSlicer { Install-SingleApp -AppName "PrusaSlicer" -WingetI
 function Install-Tabby { Install-SingleApp -AppName "Tabby" -WingetID "Eugeny.Tabby" }
 
 #=============================================================================
+# SECURITY & PRIVACY FUNCTIONS
+#=============================================================================
+
+function Disable-WindowsTelemetry {
+    Write-Log "`n=== Disabling Windows Telemetry & Data Collection ===" "INFO"
+    
+    try {
+        # Check current telemetry level
+        $currentLevel = Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Name "AllowTelemetry" -ErrorAction SilentlyContinue
+        if ($currentLevel) {
+            Write-Log "BEFORE: Telemetry level = $($currentLevel.AllowTelemetry)" "INFO"
+        } else {
+            Write-Log "BEFORE: Telemetry policy not set (default enabled)" "INFO"
+        }
+        
+        Write-Log "Configuring telemetry and privacy settings..."
+        
+        # Disable telemetry
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
+        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        Set-ItemProperty -Path $regPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force
+        
+        # Disable activity feed
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableActivityFeed" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        
+        # Disable advertising ID
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo"
+        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        Set-ItemProperty -Path $regPath -Name "DisabledByGroupPolicy" -Value 1 -Type DWord -Force
+        
+        # Disable location tracking
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors" -Name "DisableLocation" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+        
+        Write-Log "AFTER: Telemetry disabled (level 0)" "SUCCESS"
+        Write-Log "Windows telemetry and data collection disabled successfully!" "SUCCESS"
+        Write-Log "A restart is recommended for all changes to take effect." "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to disable telemetry: $($_)" "ERROR"
+    }
+}
+
+function Remove-WindowsBloatware {
+    Write-Log "`n=== Removing Windows Bloatware ===" "INFO"
+    
+    try {
+        # List of bloatware to remove
+        $bloatwareApps = @(
+            "Microsoft.3DBuilder",
+            "Microsoft.BingNews",
+            "Microsoft.BingWeather",
+            "Microsoft.GetHelp",
+            "Microsoft.Getstarted",
+            "Microsoft.Messaging",
+            "Microsoft.Microsoft3DViewer",
+            "Microsoft.MicrosoftSolitaireCollection",
+            "Microsoft.MixedReality.Portal",
+            "Microsoft.OneConnect",
+            "Microsoft.People",
+            "Microsoft.Print3D",
+            "Microsoft.SkypeApp",
+            "Microsoft.Wallet",
+            "Microsoft.WindowsCamera",
+            "Microsoft.WindowsFeedbackHub",
+            "Microsoft.WindowsMaps",
+            "Microsoft.YourPhone",
+            "Microsoft.ZuneMusic",
+            "Microsoft.ZuneVideo"
+        )
+        
+        Write-Log "BEFORE: Scanning for bloatware apps..." "INFO"
+        $installedBloat = @()
+        foreach ($app in $bloatwareApps) {
+            $installed = Get-AppxPackage -Name $app -AllUsers -ErrorAction SilentlyContinue
+            if ($installed) {
+                $installedBloat += $app
+            }
+        }
+        
+        if ($installedBloat.Count -eq 0) {
+            Write-Log "No bloatware apps found to remove" "SUCCESS"
+            return
+        }
+        
+        Write-Log "Found $($installedBloat.Count) bloatware apps to remove" "INFO"
+        
+        $removedCount = 0
+        foreach ($app in $installedBloat) {
+            try {
+                Write-Log "Removing $app..." "INFO"
+                Get-AppxPackage -Name $app -AllUsers | Remove-AppxPackage -ErrorAction SilentlyContinue
+                Get-AppxProvisionedPackage -Online | Where-Object DisplayName -like $app | Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+                $removedCount++
+            }
+            catch {
+                Write-Log "Failed to remove $app" "WARNING"
+            }
+        }
+        
+        Write-Log "AFTER: Removed $removedCount out of $($installedBloat.Count) bloatware apps" "SUCCESS"
+        Write-Log "Windows bloatware removal completed!" "SUCCESS"
+        
+    }
+    catch {
+        Write-Log "Failed to remove bloatware: $($_)" "ERROR"
+    }
+}
+
+function Disable-Cortana {
+    Write-Log "`n=== Disabling Cortana ===" "INFO"
+    
+    try {
+        # Check current state
+        $currentValue = Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search" -Name "AllowCortana" -ErrorAction SilentlyContinue
+        if ($currentValue -and $currentValue.AllowCortana -eq 0) {
+            Write-Log "BEFORE: Cortana is already disabled" "INFO"
+        } else {
+            Write-Log "BEFORE: Cortana is enabled" "INFO"
+        }
+        
+        Write-Log "Disabling Cortana..."
+        
+        # Create registry path if it doesn't exist
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
+        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        
+        # Disable Cortana
+        Set-ItemProperty -Path $regPath -Name "AllowCortana" -Value 0 -Type DWord -Force
+        Set-ItemProperty -Path $regPath -Name "DisableWebSearch" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $regPath -Name "ConnectedSearchUseWeb" -Value 0 -Type DWord -Force
+        
+        Write-Log "AFTER: Cortana disabled successfully" "SUCCESS"
+        Write-Log "A restart is recommended for changes to take effect." "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to disable Cortana: $($_)" "ERROR"
+    }
+}
+
+function Configure-DefenderExclusions {
+    Write-Log "`n=== Configuring Windows Defender Exclusions ===" "INFO"
+    
+    try {
+        # Common development folders to exclude
+        $devFolders = @(
+            "$env:USERPROFILE\Documents\GitHub",
+            "$env:USERPROFILE\Documents\Projects",
+            "$env:USERPROFILE\Source",
+            "C:\Dev",
+            "C:\Projects",
+            "$env:USERPROFILE\AppData\Local\Temp"
+        )
+        
+        Write-Log "Adding development folders to Windows Defender exclusions..." "INFO"
+        
+        $addedCount = 0
+        foreach ($folder in $devFolders) {
+            try {
+                if (Test-Path $folder) {
+                    Add-MpPreference -ExclusionPath $folder -ErrorAction SilentlyContinue
+                    Write-Log "Added exclusion: $folder" "SUCCESS"
+                    $addedCount++
+                } else {
+                    Write-Log "Folder not found, skipping: $folder" "INFO"
+                }
+            }
+            catch {
+                Write-Log "Failed to add exclusion for: $folder" "WARNING"
+            }
+        }
+        
+        # Add common development file extensions
+        $devExtensions = @(".tmp", ".log", ".cache", ".node_modules")
+        foreach ($ext in $devExtensions) {
+            try {
+                Add-MpPreference -ExclusionExtension $ext -ErrorAction SilentlyContinue
+                Write-Log "Added extension exclusion: $ext" "SUCCESS"
+            }
+            catch {
+                Write-Log "Failed to add extension exclusion: $ext" "WARNING"
+            }
+        }
+        
+        Write-Log "Windows Defender exclusions configured successfully!" "SUCCESS"
+        Write-Log "Added $addedCount folder exclusions" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to configure Defender exclusions: $($_)" "ERROR"
+    }
+}
+
+function Disable-WindowsUpdateAutoRestart {
+    Write-Log "`n=== Disabling Windows Update Auto-Restart ===" "INFO"
+    
+    try {
+        # Check current state
+        $currentValue = Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" -Name "NoAutoRebootWithLoggedOnUsers" -ErrorAction SilentlyContinue
+        if ($currentValue -and $currentValue.NoAutoRebootWithLoggedOnUsers -eq 1) {
+            Write-Log "BEFORE: Auto-restart is already disabled" "INFO"
+        } else {
+            Write-Log "BEFORE: Auto-restart is enabled" "INFO"
+        }
+        
+        Write-Log "Disabling Windows Update auto-restart..."
+        
+        # Create registry path if it doesn't exist
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        
+        # Disable auto-restart
+        Set-ItemProperty -Path $regPath -Name "NoAutoRebootWithLoggedOnUsers" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $regPath -Name "AUOptions" -Value 3 -Type DWord -Force  # Download and notify for install
+        
+        Write-Log "AFTER: Windows Update auto-restart disabled" "SUCCESS"
+        Write-Log "Windows will no longer automatically restart after updates!" "SUCCESS"
+        
+    }
+    catch {
+        Write-Log "Failed to disable Windows Update auto-restart: $($_)" "ERROR"
+    }
+}
+
+#=============================================================================
+# PERFORMANCE & SYSTEM FUNCTIONS
+#=============================================================================
+
+function Set-HighPerformancePower {
+    Write-Log "`n=== Setting High Performance Power Plan ===" "INFO"
+    
+    try {
+        # Get current power plan
+        $currentPlan = powercfg /getactivescheme
+        Write-Log "BEFORE: $currentPlan" "INFO"
+        
+        Write-Log "Setting High Performance power plan..."
+        
+        # Set to High Performance
+        powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+        
+        # Verify change
+        $newPlan = powercfg /getactivescheme
+        Write-Log "AFTER: $newPlan" "SUCCESS"
+        Write-Log "High Performance power plan activated!" "SUCCESS"
+        
+    }
+    catch {
+        Write-Log "Failed to set High Performance power plan: $($_)" "ERROR"
+    }
+}
+
+function Disable-VisualEffects {
+    Write-Log "`n=== Disabling Visual Effects for Performance ===" "INFO"
+    
+    try {
+        # Check current state
+        $currentValue = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -ErrorAction SilentlyContinue
+        if ($currentValue) {
+            Write-Log "BEFORE: Visual effects setting = $($currentValue.VisualFXSetting)" "INFO"
+        } else {
+            Write-Log "BEFORE: Visual effects setting not configured" "INFO"
+        }
+        
+        Write-Log "Configuring visual effects for best performance..."
+        
+        # Set to performance mode (2 = best performance, 1 = best appearance, 0 = let Windows choose, 3 = custom)
+        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
+        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        Set-ItemProperty -Path $regPath -Name "VisualFXSetting" -Value 2 -Type DWord -Force
+        
+        # Additional performance settings
+        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Value ([byte[]](144,18,3,128,16,0,0,0)) -Type Binary -Force
+        
+        Write-Log "AFTER: Visual effects set to best performance" "SUCCESS"
+        Write-Log "Visual effects disabled for better performance!" "SUCCESS"
+        Write-Log "Changes will take effect after next login." "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to disable visual effects: $($_)" "ERROR"
+    }
+}
+
+function Configure-VirtualMemory {
+    Write-Log "`n=== Configuring Virtual Memory ===" "INFO"
+    
+    try {
+        # Get total RAM
+        $totalRAM = [math]::Round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
+        Write-Log "BEFORE: Total RAM detected = $totalRAM GB" "INFO"
+        
+        # Calculate optimal page file size (1.5x RAM)
+        $optimalSize = [math]::Round($totalRAM * 1.5 * 1024)  # Convert to MB
+        
+        Write-Log "Configuring virtual memory to $optimalSize MB..." "INFO"
+        
+        # Note: This requires WMI and can be complex, so we'll provide guidance instead
+        Write-Log "Recommended page file size: $optimalSize MB" "INFO"
+        Write-Log "To manually configure:" "INFO"
+        Write-Log "1. Open System Properties > Advanced > Performance Settings" "INFO"
+        Write-Log "2. Go to Advanced tab > Virtual Memory > Change" "INFO"
+        Write-Log "3. Uncheck 'Automatically manage' and set custom size" "INFO"
+        Write-Log "4. Set Initial size: $optimalSize MB" "INFO"
+        Write-Log "5. Set Maximum size: $optimalSize MB" "INFO"
+        
+        Write-Log "Virtual memory configuration guidance provided!" "SUCCESS"
+        
+    }
+    catch {
+        Write-Log "Failed to configure virtual memory: $($_)" "ERROR"
+    }
+}
+
+function Invoke-SystemCleanup {
+    Write-Log "`n=== Performing System Cleanup ===" "INFO"
+    
+    try {
+        Write-Log "Cleaning temporary files and system cache..." "INFO"
+        
+        $cleanupPaths = @(
+            "$env:TEMP",
+            "$env:LOCALAPPDATA\Temp",
+            "$env:windir\Temp",
+            "$env:windir\Prefetch",
+            "$env:LOCALAPPDATA\Microsoft\Windows\INetCache"
+        )
+        
+        $totalCleaned = 0
+        foreach ($path in $cleanupPaths) {
+            if (Test-Path $path) {
+                try {
+                    $beforeSize = (Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                    Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+                    $afterSize = (Get-ChildItem $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+                    $cleaned = ($beforeSize - $afterSize) / 1MB
+                    $totalCleaned += $cleaned
+                    Write-Log "Cleaned $path - Freed: $([math]::Round($cleaned, 2)) MB" "SUCCESS"
+                }
+                catch {
+                    Write-Log "Could not fully clean $path (some files in use)" "WARNING"
+                }
+            }
+        }
+        
+        # Run Disk Cleanup
+        Write-Log "Running Windows Disk Cleanup..." "INFO"
+        Start-Process cleanmgr.exe -ArgumentList "/sagerun:1" -NoNewWindow -Wait -ErrorAction SilentlyContinue
+        
+        Write-Log "System cleanup completed! Total freed: $([math]::Round($totalCleaned, 2)) MB" "SUCCESS"
+        
+    }
+    catch {
+        Write-Log "Failed to perform system cleanup: $($_)" "ERROR"
+    }
+}
+
+function Disable-StartupPrograms {
+    Write-Log "`n=== Managing Startup Programs ===" "INFO"
+    
+    try {
+        Write-Log "Analyzing startup programs..." "INFO"
+        
+        # Get startup items from registry
+        $startupItems = @()
+        $registryPaths = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"
+        )
+        
+        foreach ($regPath in $registryPaths) {
+            if (Test-Path $regPath) {
+                $items = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
+                $items.PSObject.Properties | Where-Object { $_.Name -notmatch "PS" } | ForEach-Object {
+                    $startupItems += [PSCustomObject]@{
+                        Name = $_.Name
+                        Path = $_.Value
+                        Location = $regPath
+                    }
+                }
+            }
+        }
+        
+        Write-Log "BEFORE: Found $($startupItems.Count) startup programs" "INFO"
+        
+        # Display startup programs for user review
+        if ($startupItems.Count -gt 0) {
+            Write-Log "Current startup programs:" "INFO"
+            $startupItems | ForEach-Object { Write-Log "- $($_.Name): $($_.Path)" "INFO" }
+        }
+        
+        Write-Log "Use Task Manager > Startup tab to disable unwanted programs" "INFO"
+        Write-Log "Startup programs analysis completed!" "SUCCESS"
+        
+    }
+    catch {
+        Write-Log "Failed to analyze startup programs: $($_)" "ERROR"
+    }
+}
+
+#=============================================================================
+# DEVELOPMENT ENVIRONMENT FUNCTIONS
+#=============================================================================
+
+function Install-WindowsTerminal {
+    Write-Log "`n=== Installing Windows Terminal ===" "INFO"
+    
+    # Check if already installed
+    $terminal = Get-AppxPackage -Name "Microsoft.WindowsTerminal" -ErrorAction SilentlyContinue
+    if ($terminal) {
+        Write-Log "Windows Terminal is already installed!" "SUCCESS"
+        return
+    }
+    
+    if ($script:WingetInstalled) {
+        try {
+            Write-Log "Installing Windows Terminal via winget..."
+            winget install --id Microsoft.WindowsTerminal --exact --silent --accept-package-agreements --accept-source-agreements
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log "Windows Terminal installed successfully!" "SUCCESS"
+                return
+            }
+        }
+        catch {
+            Write-Log "Winget installation failed, trying Microsoft Store..." "WARNING"
+        }
+    }
+    
+    # Fallback to Microsoft Store
+    Write-Log "Opening Microsoft Store for Windows Terminal installation..." "INFO"
+    Start-Process "ms-windows-store://pdp/?productid=9N0DX20HK701"
+}
+
+function Install-PackageManagers {
+    Write-Log "`n=== Installing Package Managers ===" "INFO"
+    
+    try {
+        # Install Chocolatey
+        Write-Log "Installing Chocolatey package manager..." "INFO"
+        
+        # Check if Chocolatey is already installed
+        if (Test-CommandExists "choco") {
+            Write-Log "Chocolatey is already installed!" "SUCCESS"
+        } else {
+            $chocoInstallScript = Invoke-RestMethod https://chocolatey.org/install.ps1
+            Invoke-Expression $chocoInstallScript
+            
+            if (Test-CommandExists "choco") {
+                Write-Log "Chocolatey installed successfully!" "SUCCESS"
+            } else {
+                Write-Log "Failed to install Chocolatey" "ERROR"
+            }
+        }
+        
+        # Install Scoop
+        Write-Log "Installing Scoop package manager..." "INFO"
+        
+        if (Test-CommandExists "scoop") {
+            Write-Log "Scoop is already installed!" "SUCCESS"
+        } else {
+            Invoke-RestMethod get.scoop.sh | Invoke-Expression
+            
+            if (Test-CommandExists "scoop") {
+                Write-Log "Scoop installed successfully!" "SUCCESS"
+            } else {
+                Write-Log "Failed to install Scoop" "ERROR"
+            }
+        }
+        
+    }
+    catch {
+        Write-Log "Failed to install package managers: $($_)" "ERROR"
+    }
+}
+
+function Install-DockerDesktop {
+    Write-Log "`n=== Installing Docker Desktop ===" "INFO"
+    
+    # Check if already installed
+    $dockerPath = "${env:ProgramFiles}\Docker\Docker\Docker Desktop.exe"
+    if (Test-Path $dockerPath) {
+        Write-Log "Docker Desktop is already installed!" "SUCCESS"
+        return
+    }
+    
+    if ($script:WingetInstalled) {
+        try {
+            Write-Log "Installing Docker Desktop via winget..."
+            winget install --id Docker.DockerDesktop --exact --silent --accept-package-agreements --accept-source-agreements
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log "Docker Desktop installed successfully!" "SUCCESS"
+                Write-Log "You may need to restart and enable WSL2 for Docker to work properly." "INFO"
+                return
+            }
+        }
+        catch {
+            Write-Log "Winget installation failed" "WARNING"
+        }
+    }
+    
+    # Fallback to direct download
+    try {
+        $dockerUrl = "https://desktop.docker.com/win/stable/Docker%20Desktop%20Installer.exe"
+        $dockerInstaller = "$script:TempPath\DockerDesktopInstaller.exe"
+        
+        Write-Log "Downloading Docker Desktop installer..."
+        Invoke-WebRequest -Uri $dockerUrl -OutFile $dockerInstaller -UseBasicParsing
+        
+        Write-Log "Installing Docker Desktop..."
+        Start-Process $dockerInstaller -ArgumentList "install", "--quiet" -Wait
+        
+        Write-Log "Docker Desktop installed successfully!" "SUCCESS"
+    }
+    catch {
+        Write-Log "Failed to install Docker Desktop: $($_)" "ERROR"
+    }
+}
+
+function Setup-DevFolderStructure {
+    Write-Log "`n=== Setting up Development Folder Structure ===" "INFO"
+    
+    try {
+        $devFolders = @(
+            "$env:USERPROFILE\Documents\Projects",
+            "$env:USERPROFILE\Documents\GitHub",
+            "$env:USERPROFILE\Documents\Scripts",
+            "$env:USERPROFILE\Documents\Tools",
+            "C:\Dev",
+            "C:\Tools"
+        )
+        
+        $createdCount = 0
+        foreach ($folder in $devFolders) {
+            if (!(Test-Path $folder)) {
+                try {
+                    New-Item -ItemType Directory -Path $folder -Force | Out-Null
+                    Write-Log "Created: $folder" "SUCCESS"
+                    $createdCount++
+                } catch {
+                    Write-Log "Failed to create: $folder" "WARNING"
+                }
+            } else {
+                Write-Log "Already exists: $folder" "INFO"
+            }
+        }
+        
+        Write-Log "Development folder structure setup completed!" "SUCCESS"
+        Write-Log "Created $createdCount new folders" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to setup dev folder structure: $($_)" "ERROR"
+    }
+}
+
+function Install-NodeJS {
+    Write-Log "`n=== Installing Node.js ===" "INFO"
+    
+    # Check if already installed
+    if (Test-CommandExists "node") {
+        $nodeVersion = node --version
+        Write-Log "Node.js is already installed: $nodeVersion" "SUCCESS"
+        return
+    }
+    
+    if ($script:WingetInstalled) {
+        try {
+            Write-Log "Installing Node.js LTS via winget..."
+            winget install --id OpenJS.NodeJS --exact --silent --accept-package-agreements --accept-source-agreements
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log "Node.js installed successfully!" "SUCCESS"
+                Write-Log "You may need to restart your terminal to use Node.js" "INFO"
+                return
+            }
+        }
+        catch {
+            Write-Log "Winget installation failed" "WARNING"
+        }
+    }
+    
+    Write-Log "Please install Node.js manually from https://nodejs.org" "INFO"
+}
+
+function Install-Python {
+    Write-Log "`n=== Installing Python ===" "INFO"
+    
+    # Check if already installed
+    if (Test-CommandExists "python") {
+        $pythonVersion = python --version
+        Write-Log "Python is already installed: $pythonVersion" "SUCCESS"
+        return
+    }
+    
+    if ($script:WingetInstalled) {
+        try {
+            Write-Log "Installing Python via winget..."
+            winget install --id Python.Python.3.11 --exact --silent --accept-package-agreements --accept-source-agreements
+            
+            if ($LASTEXITCODE -eq 0) {
+                Write-Log "Python installed successfully!" "SUCCESS"
+                Write-Log "You may need to restart your terminal to use Python" "INFO"
+                return
+            }
+        }
+        catch {
+            Write-Log "Winget installation failed" "WARNING"
+        }
+    }
+    
+    Write-Log "Please install Python manually from https://python.org" "INFO"
+}
+
+#=============================================================================
+# NETWORK & CONNECTIVITY FUNCTIONS
+#=============================================================================
+
+function Configure-DNSSettings {
+    Write-Log "`n=== Configuring DNS Settings ===" "INFO"
+    
+    try {
+        # Get network adapters
+        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.MediaType -eq "802.3" }
+        
+        if ($adapters.Count -eq 0) {
+            Write-Log "No active network adapters found" "ERROR"
+            return
+        }
+        
+        Write-Log "BEFORE: Getting current DNS settings..." "INFO"
+        foreach ($adapter in $adapters) {
+            $currentDNS = Get-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -AddressFamily IPv4
+            Write-Log "Adapter: $($adapter.Name) - Current DNS: $($currentDNS.ServerAddresses -join ', ')" "INFO"
+        }
+        
+        Write-Host "`nDNS Configuration Options:" -ForegroundColor Cyan
+        Write-Host "1. Cloudflare (1.1.1.1, 1.0.0.1) - Fast & Privacy-focused" -ForegroundColor White
+        Write-Host "2. Google (8.8.8.8, 8.8.4.4) - Reliable & Fast" -ForegroundColor White
+        Write-Host "3. Quad9 (9.9.9.9, 149.112.112.112) - Security-focused" -ForegroundColor White
+        Write-Host "4. Skip DNS configuration" -ForegroundColor White
+        
+        $choice = Read-Host "Choose DNS provider (1-4)"
+        
+        $dnsServers = switch ($choice) {
+            "1" { @("1.1.1.1", "1.0.0.1"); "Cloudflare" }
+            "2" { @("8.8.8.8", "8.8.4.4"); "Google" }
+            "3" { @("9.9.9.9", "149.112.112.112"); "Quad9" }
+            "4" { Write-Log "DNS configuration skipped" "INFO"; return }
+            default { Write-Log "Invalid choice, skipping DNS configuration" "ERROR"; return }
+        }
+        
+        $providerName = $dnsServers[1]
+        $servers = $dnsServers[0]
+        
+        Write-Log "Setting DNS to $providerName ($($servers -join ', '))..." "INFO"
+        
+        foreach ($adapter in $adapters) {
+            try {
+                Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ServerAddresses $servers
+                Write-Log "Updated DNS for adapter: $($adapter.Name)" "SUCCESS"
+            }
+            catch {
+                Write-Log "Failed to update DNS for adapter: $($adapter.Name)" "WARNING"
+            }
+        }
+        
+        Write-Log "AFTER: DNS configuration completed!" "SUCCESS"
+        Write-Log "New DNS servers: $($servers -join ', ')" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to configure DNS settings: $($_)" "ERROR"
+    }
+}
+
+function Enable-SSHServer {
+    Write-Log "`n=== Enabling SSH Server ===" "INFO"
+    
+    try {
+        # Check if OpenSSH Server is installed
+        $sshServerFeature = Get-WindowsCapability -Online -Name OpenSSH.Server*
+        
+        if ($sshServerFeature.State -eq "Installed") {
+            Write-Log "BEFORE: OpenSSH Server is already installed" "INFO"
+        } else {
+            Write-Log "BEFORE: OpenSSH Server is not installed" "INFO"
+            Write-Log "Installing OpenSSH Server..." "INFO"
+            Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+        }
+        
+        # Start and enable SSH service
+        Write-Log "Configuring SSH service..." "INFO"
+        Start-Service sshd
+        Set-Service -Name sshd -StartupType 'Automatic'
+        
+        # Configure firewall
+        Write-Log "Configuring Windows Firewall for SSH..." "INFO"
+        New-NetFirewallRule -Name sshd -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 22 -ErrorAction SilentlyContinue
+        
+        Write-Log "AFTER: SSH Server enabled and running!" "SUCCESS"
+        Write-Log "SSH is now accessible on port 22" "INFO"
+        Write-Log "Default authentication is password-based" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to enable SSH server: $($_)" "ERROR"
+    }
+}
+
+function Configure-RemoteDesktop {
+    Write-Log "`n=== Configuring Remote Desktop ===" "INFO"
+    
+    try {
+        # Check current state
+        $currentRDP = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -ErrorAction SilentlyContinue
+        if ($currentRDP -and $currentRDP.fDenyTSConnections -eq 0) {
+            Write-Log "BEFORE: Remote Desktop is already enabled" "INFO"
+        } else {
+            Write-Log "BEFORE: Remote Desktop is disabled" "INFO"
+        }
+        
+        $enable = Read-Host "Do you want to enable Remote Desktop? (Y/N)"
+        if ($enable -ne "Y" -and $enable -ne "y") {
+            Write-Log "Remote Desktop configuration skipped" "INFO"
+            return
+        }
+        
+        Write-Log "Enabling Remote Desktop..." "INFO"
+        
+        # Enable Remote Desktop
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -Force
+        
+        # Enable Network Level Authentication (more secure)
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1 -Force
+        
+        # Configure firewall
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        
+        Write-Log "AFTER: Remote Desktop enabled successfully!" "SUCCESS"
+        Write-Log "RDP is now accessible on port 3389" "INFO"
+        Write-Log "Network Level Authentication is enabled for security" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to configure Remote Desktop: $($_)" "ERROR"
+    }
+}
+
+function Optimize-NetworkSettings {
+    Write-Log "`n=== Optimizing Network Settings ===" "INFO"
+    
+    try {
+        Write-Log "Applying network optimizations..." "INFO"
+        
+        # TCP optimizations
+        netsh int tcp set global autotuninglevel=normal
+        netsh int tcp set global rss=enabled
+        netsh int tcp set global netdma=enabled
+        netsh int tcp set global dca=enabled
+        
+        # Disable bandwidth throttling
+        New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 4294967295 -PropertyType DWORD -Force -ErrorAction SilentlyContinue
+        
+        Write-Log "Network optimizations applied successfully!" "SUCCESS"
+        Write-Log "Optimizations include TCP auto-tuning, RSS, and bandwidth throttling removal" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to optimize network settings: $($_)" "ERROR"
+    }
+}
+
+#=============================================================================
+# FILE SYSTEM & UI FUNCTIONS
+#=============================================================================
+
+function Show-FileExtensions {
+    Write-Log "`n=== Showing File Extensions ===" "INFO"
+    
+    try {
+        # Check current state
+        $currentValue = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -ErrorAction SilentlyContinue
+        if ($currentValue -and $currentValue.HideFileExt -eq 0) {
+            Write-Log "BEFORE: File extensions are already visible" "INFO"
+        } else {
+            Write-Log "BEFORE: File extensions are hidden" "INFO"
+        }
+        
+        Write-Log "Enabling file extension display..." "INFO"
+        
+        # Show file extensions
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 0 -Type DWord -Force
+        
+        # Restart Explorer to apply changes
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Seconds 2
+        Start-Process explorer
+        
+        Write-Log "AFTER: File extensions are now visible!" "SUCCESS"
+        Write-Log "Explorer restarted to apply changes" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to show file extensions: $($_)" "ERROR"
+    }
+}
+
+function Show-HiddenFiles {
+    Write-Log "`n=== Showing Hidden Files ===" "INFO"
+    
+    try {
+        # Check current state
+        $currentValue = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -ErrorAction SilentlyContinue
+        if ($currentValue -and $currentValue.Hidden -eq 1) {
+            Write-Log "BEFORE: Hidden files are already visible" "INFO"
+        } else {
+            Write-Log "BEFORE: Hidden files are not visible" "INFO"
+        }
+        
+        Write-Log "Enabling hidden files display..." "INFO"
+        
+        # Show hidden files and folders
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowSuperHidden" -Value 1 -Type DWord -Force
+        
+        # Restart Explorer to apply changes
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Seconds 2
+        Start-Process explorer
+        
+        Write-Log "AFTER: Hidden files and system files are now visible!" "SUCCESS"
+        Write-Log "Explorer restarted to apply changes" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to show hidden files: $($_)" "ERROR"
+    }
+}
+
+function Configure-DarkMode {
+    Write-Log "`n=== Configuring Dark Mode ===" "INFO"
+    
+    try {
+        # Check current theme
+        $currentAppTheme = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -ErrorAction SilentlyContinue
+        $currentSystemTheme = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -ErrorAction SilentlyContinue
+        
+        if ($currentAppTheme -and $currentAppTheme.AppsUseLightTheme -eq 0) {
+            Write-Log "BEFORE: Dark mode is already enabled for apps" "INFO"
+        } else {
+            Write-Log "BEFORE: Light mode is enabled for apps" "INFO"
+        }
+        
+        Write-Host "`nTheme Configuration:" -ForegroundColor Cyan
+        Write-Host "1. Enable Dark Mode (apps and system)" -ForegroundColor White
+        Write-Host "2. Enable Light Mode (apps and system)" -ForegroundColor White
+        Write-Host "3. Skip theme configuration" -ForegroundColor White
+        
+        $choice = Read-Host "Choose theme option (1-3)"
+        
+        switch ($choice) {
+            "1" {
+                Write-Log "Enabling Dark Mode..." "INFO"
+                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
+                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
+                Write-Log "AFTER: Dark Mode enabled!" "SUCCESS"
+            }
+            "2" {
+                Write-Log "Enabling Light Mode..." "INFO"
+                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 1 -Type DWord -Force
+                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 1 -Type DWord -Force
+                Write-Log "AFTER: Light Mode enabled!" "SUCCESS"
+            }
+            "3" {
+                Write-Log "Theme configuration skipped" "INFO"
+                return
+            }
+            default {
+                Write-Log "Invalid choice, skipping theme configuration" "ERROR"
+                return
+            }
+        }
+        
+        Write-Log "Theme changes applied! Some apps may require restart to reflect changes." "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to configure dark mode: $($_)" "ERROR"
+    }
+}
+
+function Set-DefaultApps {
+    Write-Log "`n=== Setting Default Applications ===" "INFO"
+    
+    try {
+        Write-Log "Opening Default Apps settings..." "INFO"
+        Write-Log "You can manually configure your preferred default applications" "INFO"
+        
+        # Open Windows Settings to Default Apps
+        Start-Process "ms-settings:defaultapps"
+        
+        Write-Log "Default Apps settings opened!" "SUCCESS"
+        Write-Log "Configure your preferred browser, email client, and other defaults" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to open default apps settings: $($_)" "ERROR"
+    }
+}
+
+function Configure-TaskbarCustomizations {
+    Write-Log "`n=== Configuring Taskbar Customizations ===" "INFO"
+    
+    try {
+        Write-Log "Applying taskbar optimizations..." "INFO"
+        
+        # Hide search box
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search" -Name "SearchboxTaskbarMode" -Value 0 -Type DWord -Force
+        
+        # Hide task view button
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowTaskViewButton" -Value 0 -Type DWord -Force
+        
+        # Hide widgets (Windows 11)
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarDa" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        
+        # Small taskbar icons
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarSmallIcons" -Value 1 -Type DWord -Force
+        
+        # Never combine taskbar buttons
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarGlomLevel" -Value 2 -Type DWord -Force
+        
+        # Restart Explorer to apply changes
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Seconds 2
+        Start-Process explorer
+        
+        Write-Log "Taskbar customizations applied successfully!" "SUCCESS"
+        Write-Log "Changes: Hidden search box, task view, widgets; small icons; never combine buttons" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to configure taskbar customizations: $($_)" "ERROR"
+    }
+}
+
+#=============================================================================
+# BACKUP & RECOVERY FUNCTIONS
+#=============================================================================
+
+function Create-SystemRestorePoint {
+    Write-Log "`n=== Creating System Restore Point ===" "INFO"
+    
+    try {
+        # Check if System Restore is enabled
+        $restoreStatus = Get-ComputerRestorePoint -ErrorAction SilentlyContinue
+        
+        Write-Log "Creating system restore point..." "INFO"
+        
+        # Enable System Restore if not enabled
+        Enable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
+        
+        # Create restore point
+        $restorePointName = "Post-Install Setup - $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
+        Checkpoint-Computer -Description $restorePointName -RestorePointType "MODIFY_SETTINGS"
+        
+        Write-Log "System restore point created successfully!" "SUCCESS"
+        Write-Log "Restore point name: $restorePointName" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to create system restore point: $($_)" "ERROR"
+        Write-Log "You can manually create one in System Properties > System Protection" "INFO"
+    }
+}
+
+function Export-InstalledPrograms {
+    Write-Log "`n=== Exporting Installed Programs List ===" "INFO"
+    
+    try {
+        $outputPath = "$env:USERPROFILE\Desktop\InstalledPrograms_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+        
+        Write-Log "Generating installed programs list..." "INFO"
+        
+        # Get installed programs from registry
+        $programs = @()
+        
+        # 64-bit programs
+        $programs += Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | 
+                     Where-Object { $_.DisplayName } | 
+                     Select-Object DisplayName, DisplayVersion, Publisher, InstallDate
+        
+        # 32-bit programs on 64-bit systems
+        if (Test-Path "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall") {
+            $programs += Get-ItemProperty HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* | 
+                         Where-Object { $_.DisplayName } | 
+                         Select-Object DisplayName, DisplayVersion, Publisher, InstallDate
+        }
+        
+        # Sort and remove duplicates
+        $programs = $programs | Sort-Object DisplayName | Get-Unique -AsString
+        
+        # Export to file
+        "Installed Programs List - Generated on $(Get-Date)" | Out-File -FilePath $outputPath -Encoding UTF8
+        "=" * 50 | Out-File -FilePath $outputPath -Append -Encoding UTF8
+        "" | Out-File -FilePath $outputPath -Append -Encoding UTF8
+        
+        $programs | ForEach-Object {
+            "Program: $($_.DisplayName)" | Out-File -FilePath $outputPath -Append -Encoding UTF8
+            "Version: $($_.DisplayVersion)" | Out-File -FilePath $outputPath -Append -Encoding UTF8
+            "Publisher: $($_.Publisher)" | Out-File -FilePath $outputPath -Append -Encoding UTF8
+            "Install Date: $($_.InstallDate)" | Out-File -FilePath $outputPath -Append -Encoding UTF8
+            "" | Out-File -FilePath $outputPath -Append -Encoding UTF8
+        }
+        
+        Write-Log "Installed programs list exported successfully!" "SUCCESS"
+        Write-Log "File saved to: $outputPath" "INFO"
+        Write-Log "Found $($programs.Count) installed programs" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to export installed programs list: $($_)" "ERROR"
+    }
+}
+
+function Configure-WindowsBackup {
+    Write-Log "`n=== Configuring Windows Backup ===" "INFO"
+    
+    try {
+        Write-Log "Opening Windows Backup settings..." "INFO"
+        
+        # Check Windows version and open appropriate backup settings
+        $osVersion = [System.Environment]::OSVersion.Version
+        
+        if ($osVersion.Major -ge 10) {
+            # Windows 10/11 - Open Settings app
+            Start-Process "ms-settings:backup"
+            Write-Log "Windows 10/11 Backup settings opened" "SUCCESS"
+            Write-Log "Configure File History or OneDrive backup as needed" "INFO"
+        } else {
+            # Older Windows - Open Control Panel backup
+            Start-Process "control" -ArgumentList "/name Microsoft.BackupAndRestore"
+            Write-Log "Windows Backup and Restore opened" "SUCCESS"
+        }
+        
+        Write-Log "Backup configuration guidance:" "INFO"
+        Write-Log "- Enable File History for user files" "INFO"
+        Write-Log "- Consider OneDrive for cloud backup" "INFO"
+        Write-Log "- Set up regular backup schedule" "INFO"
+        
+    }
+    catch {
+        Write-Log "Failed to open backup settings: $($_)" "ERROR"
+    }
+}
+
+#=============================================================================
+# ENTERPRISE/PROFESSIONAL FUNCTIONS
+#=============================================================================
+
+function Configure-DomainJoin {
+    Write-Log "`n=== Domain Join Assistant ===" "INFO"
+    
+    try {
+        # Check if already domain-joined
+        $computerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
+        
+        if ($computerSystem.PartOfDomain) {
+            Write-Log "BEFORE: Computer is already joined to domain: $($computerSystem.Domain)" "INFO"
+            $unjoin = Read-Host "Do you want to unjoin from the current domain? (Y/N)"
+            if ($unjoin -eq "Y" -or $unjoin -eq "y") {
+                Write-Log "Please use 'Remove-Computer' cmdlet manually for domain unjoin" "INFO"
+                return
+            } else {
+                Write-Log "Domain join assistant cancelled" "INFO"
+                return
+            }
+        } else {
+            Write-Log "BEFORE: Computer is in workgroup: $($computerSystem.Workgroup)" "INFO"
+        }
+        
+        Write-Host "`nDomain Join Configuration:" -ForegroundColor Cyan
+        $domainName = Read-Host "Enter domain name (e.g., company.local)"
+        $username = Read-Host "Enter domain admin username"
+        
+        if ([string]::IsNullOrWhiteSpace($domainName) -or [string]::IsNullOrWhiteSpace($username)) {
+            Write-Log "Domain name or username cannot be empty" "ERROR"
+            return
+        }
+        
+        Write-Log "Attempting to join domain: $domainName" "INFO"
+        Write-Log "This will require domain admin credentials and a restart" "WARNING"
+        
+        $proceed = Read-Host "Proceed with domain join? (Y/N)"
+        if ($proceed -ne "Y" -and $proceed -ne "y") {
+            Write-Log "Domain join cancelled" "INFO"
+            return
+        }
+        
+        # Domain join command (will prompt for password)
+        Add-Computer -DomainName $domainName -Credential (Get-Credential -UserName $username -Message "Enter domain admin password") -Restart
+        
+    }
+    catch {
+        Write-Log "Failed to join domain: $($_)" "ERROR"
+        Write-Log "Ensure network connectivity and valid domain credentials" "INFO"
+    }
+}
+
+function Configure-ProxySettings {
+    Write-Log "`n=== Configuring Proxy Settings ===" "INFO"
+    
+    try {
+        # Check current proxy settings
+        $currentProxy = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -ErrorAction SilentlyContinue
+        
+        if ($currentProxy.ProxyEnable -eq 1) {
+            Write-Log "BEFORE: Proxy is enabled - Server: $($currentProxy.ProxyServer)" "INFO"
+        } else {
+            Write-Log "BEFORE: Proxy is disabled" "INFO"
+        }
+        
+        Write-Host "`nProxy Configuration:" -ForegroundColor Cyan
+        Write-Host "1. Configure HTTP proxy" -ForegroundColor White
+        Write-Host "2. Disable proxy" -ForegroundColor White
+        Write-Host "3. Skip proxy configuration" -ForegroundColor White
+        
+        $choice = Read-Host "Choose option (1-3)"
+        
+        switch ($choice) {
+            "1" {
+                $proxyServer = Read-Host "Enter proxy server (e.g., proxy.company.com:8080)"
+                $bypassList = Read-Host "Enter bypass list (e.g., *.local;127.0.0.1) or press Enter for default"
+                
+                if ([string]::IsNullOrWhiteSpace($bypassList)) {
+                    $bypassList = "*.local;127.0.0.1;localhost"
+                }
+                
+                Write-Log "Enabling proxy: $proxyServer" "INFO"
+                
+                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name "ProxyEnable" -Value 1 -Type DWord -Force
+                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name "ProxyServer" -Value $proxyServer -Force
+                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name "ProxyOverride" -Value $bypassList -Force
+                
+                Write-Log "AFTER: Proxy enabled successfully!" "SUCCESS"
+            }
+            "2" {
+                Write-Log "Disabling proxy..." "INFO"
+                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings" -Name "ProxyEnable" -Value 0 -Type DWord -Force
+                Write-Log "AFTER: Proxy disabled successfully!" "SUCCESS"
+            }
+            "3" {
+                Write-Log "Proxy configuration skipped" "INFO"
+                return
+            }
+            default {
+                Write-Log "Invalid choice, skipping proxy configuration" "ERROR"
+                return
+            }
+        }
+        
+    }
+    catch {
+        Write-Log "Failed to configure proxy settings: $($_)" "ERROR"
+    }
+}
+
+function Install-Certificates {
+    Write-Log "`n=== Installing Certificates ===" "INFO"
+    
+    try {
+        Write-Log "Certificate installation guidance:" "INFO"
+        Write-Log "Common certificate scenarios:" "INFO"
+        Write-Log "1. Root CA certificates for corporate networks" "INFO"
+        Write-Log "2. Development certificates for local testing" "INFO"
+        Write-Log "3. Client certificates for authentication" "INFO"
+        Write-Log "" "INFO"
+        
+        Write-Host "Certificate installation options:" -ForegroundColor Cyan
+        Write-Host "1. Open Certificate Manager (certmgr.msc)" -ForegroundColor White
+        Write-Host "2. Open Local Computer Certificates (certlm.msc)" -ForegroundColor White
+        Write-Host "3. Import certificate from file" -ForegroundColor White
+        Write-Host "4. Skip certificate installation" -ForegroundColor White
+        
+        $choice = Read-Host "Choose option (1-4)"
+        
+        switch ($choice) {
+            "1" {
+                Write-Log "Opening Certificate Manager for current user..." "INFO"
+                Start-Process "certmgr.msc"
+                Write-Log "User Certificate Manager opened" "SUCCESS"
+            }
+            "2" {
+                Write-Log "Opening Local Computer Certificate Manager..." "INFO"
+                Start-Process "certlm.msc"
+                Write-Log "Computer Certificate Manager opened" "SUCCESS"
+            }
+            "3" {
+                $certPath = Read-Host "Enter full path to certificate file (.cer, .crt, .p12, .pfx)"
+                if (Test-Path $certPath) {
+                    Write-Log "Opening certificate: $certPath" "INFO"
+                    Start-Process $certPath
+                    Write-Log "Certificate import wizard launched" "SUCCESS"
+                } else {
+                    Write-Log "Certificate file not found: $certPath" "ERROR"
+                }
+            }
+            "4" {
+                Write-Log "Certificate installation skipped" "INFO"
+                return
+            }
+            default {
+                Write-Log "Invalid choice, skipping certificate installation" "ERROR"
+                return
+            }
+        }
+        
+    }
+    catch {
+        Write-Log "Failed to manage certificates: $($_)" "ERROR"
+    }
+}
+
+function Configure-GroupPolicies {
+    Write-Log "`n=== Configuring Group Policies ===" "INFO"
+    
+    try {
+        Write-Log "Group Policy configuration guidance:" "INFO"
+        Write-Log "Opening Local Group Policy Editor..." "INFO"
+        
+        # Check if gpedit.msc is available (Pro/Enterprise editions)
+        try {
+            Start-Process "gpedit.msc"
+            Write-Log "Local Group Policy Editor opened successfully!" "SUCCESS"
+            Write-Log "Common policy configurations:" "INFO"
+            Write-Log "- Computer Configuration > Administrative Templates > Windows Components" "INFO"
+            Write-Log "- User Configuration > Administrative Templates > System" "INFO"
+            Write-Log "- Security Settings > Local Policies > Security Options" "INFO"
+        }
+        catch {
+            Write-Log "Local Group Policy Editor not available (requires Pro/Enterprise edition)" "WARNING"
+            Write-Log "Alternative: Use Registry Editor or PowerShell for policy-like configurations" "INFO"
+        }
+        
+    }
+    catch {
+        Write-Log "Failed to open Group Policy Editor: $($_)" "ERROR"
+    }
+}
+
+#=============================================================================
 # DEVELOPER SETUP FUNCTIONS
 #=============================================================================
 
@@ -859,7 +2112,10 @@ function Install-AllApplications {
 
 function Install-Everything {
     Write-Log "`n=== INSTALLING EVERYTHING - ONE-CLICK SETUP ===" "INFO"
-    Write-Log "This will install all components. Please be patient..." "INFO"
+    Write-Log "This will install all components and apply optimizations. Please be patient..." "INFO"
+    
+    # Create system restore point first
+    Create-SystemRestorePoint
     
     # Install system features
     Enable-WindowsSandbox
@@ -870,6 +2126,18 @@ function Install-Everything {
     Enable-ClassicRightClick
     Enable-TaskbarEndTask
     Disable-FastBoot
+    
+    # Security & Privacy
+    Disable-WindowsTelemetry
+    Remove-WindowsBloatware
+    Disable-Cortana
+    Configure-DefenderExclusions
+    
+    # Performance optimizations
+    Set-HighPerformancePower
+    Show-FileExtensions
+    Show-HiddenFiles
+    Configure-TaskbarCustomizations
     
     # Install browsers
     Install-ChromeEnterprise
@@ -894,13 +2162,24 @@ function Install-Everything {
     Install-PrusaSlicer
     Install-Tabby
     
+    # Development environment
+    Install-WindowsTerminal
+    Install-PackageManagers
+    Setup-DevFolderStructure
+    Install-NodeJS
+    Install-Python
+    
+    # Network optimizations
+    Configure-DNSSettings
+    Optimize-NetworkSettings
+    
     # Developer setup (Git configuration only, user can manually setup SSH if needed)
     Write-Log "`n=== Setting up Git Configuration ===" "INFO"
     Setup-GitConfiguration
     
     Write-Log "`n=== COMPLETE INSTALLATION FINISHED ===" "SUCCESS"
     Write-Log "Note: A system restart is required to complete the installation of some features." "WARNING"
-    Write-Log "Reminder: You can use option 26 to setup SSH keys for Git if needed." "INFO"
+    Write-Log "Reminder: You can use individual options for SSH keys, domain join, and other specific configurations." "INFO"
 }
 
 #=============================================================================
@@ -952,13 +2231,59 @@ function Show-Menu {
     Write-Host " 27. Setup Git Only (no SSH key)" -ForegroundColor White
     Write-Host " 28. Set Computer Hostname" -ForegroundColor White
     Write-Host ""
+    Write-Host "SECURITY & PRIVACY:" -ForegroundColor Red
+    Write-Host " 29. Disable Windows Telemetry" -ForegroundColor White
+    Write-Host " 30. Remove Windows Bloatware" -ForegroundColor White
+    Write-Host " 31. Disable Cortana" -ForegroundColor White
+    Write-Host " 32. Configure Windows Defender Exclusions" -ForegroundColor White
+    Write-Host " 33. Disable Windows Update Auto-Restart" -ForegroundColor White
+    Write-Host ""
+    Write-Host "PERFORMANCE & SYSTEM:" -ForegroundColor Blue
+    Write-Host " 34. Set High Performance Power Plan" -ForegroundColor White
+    Write-Host " 35. Disable Visual Effects" -ForegroundColor White
+    Write-Host " 36. Configure Virtual Memory" -ForegroundColor White
+    Write-Host " 37. System Cleanup" -ForegroundColor White
+    Write-Host " 38. Disable Startup Programs" -ForegroundColor White
+    Write-Host ""
+    Write-Host "DEVELOPMENT ENVIRONMENT:" -ForegroundColor DarkMagenta
+    Write-Host " 39. Install Windows Terminal" -ForegroundColor White
+    Write-Host " 40. Install Package Managers (Chocolatey/Scoop)" -ForegroundColor White
+    Write-Host " 41. Install Docker Desktop" -ForegroundColor White
+    Write-Host " 42. Setup Dev Folder Structure" -ForegroundColor White
+    Write-Host " 43. Install Node.js" -ForegroundColor White
+    Write-Host " 44. Install Python" -ForegroundColor White
+    Write-Host ""
+    Write-Host "NETWORK & CONNECTIVITY:" -ForegroundColor DarkCyan
+    Write-Host " 45. Configure DNS Settings" -ForegroundColor White
+    Write-Host " 46. Enable SSH Server" -ForegroundColor White
+    Write-Host " 47. Configure Remote Desktop" -ForegroundColor White
+    Write-Host " 48. Optimize Network Settings" -ForegroundColor White
+    Write-Host ""
+    Write-Host "FILE SYSTEM & UI:" -ForegroundColor DarkYellow
+    Write-Host " 49. Show File Extensions" -ForegroundColor White
+    Write-Host " 50. Show Hidden Files" -ForegroundColor White
+    Write-Host " 51. Configure Dark Mode" -ForegroundColor White
+    Write-Host " 52. Set Default Apps" -ForegroundColor White
+    Write-Host " 53. Configure Taskbar Customizations" -ForegroundColor White
+    Write-Host ""
+    Write-Host "BACKUP & RECOVERY:" -ForegroundColor DarkGreen
+    Write-Host " 54. Create System Restore Point" -ForegroundColor White
+    Write-Host " 55. Export Installed Programs List" -ForegroundColor White
+    Write-Host " 56. Configure Windows Backup" -ForegroundColor White
+    Write-Host ""
+    Write-Host "ENTERPRISE/PROFESSIONAL:" -ForegroundColor Gray
+    Write-Host " 57. Domain Join Assistant" -ForegroundColor White
+    Write-Host " 58. Configure Proxy Settings" -ForegroundColor White
+    Write-Host " 59. Install Certificates" -ForegroundColor White
+    Write-Host " 60. Configure Group Policies" -ForegroundColor White
+    Write-Host ""
     Write-Host "BULK OPERATIONS:" -ForegroundColor Green
-    Write-Host " 29. Update All Installed Apps via Winget" -ForegroundColor White
-    Write-Host " 30. Install All Applications Only" -ForegroundColor White
+    Write-Host " 61. Update All Installed Apps via Winget" -ForegroundColor White
+    Write-Host " 62. Install All Applications Only" -ForegroundColor White
     Write-Host ""
-    Write-Host " 31. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
+    Write-Host " 63. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
     Write-Host ""
-    Write-Host " 32. Exit" -ForegroundColor Red
+    Write-Host " 64. Exit" -ForegroundColor Red
     Write-Host ""
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "Log file: $script:LogPath" -ForegroundColor Gray
@@ -973,17 +2298,24 @@ function Start-MainMenu {
     
     do {
         Show-Menu
-        $choice = Read-Host "Enter your choice (1-32)"
+        $choice = Read-Host "Enter your choice (1-64)"
         
         switch ($choice) {
+            # SYSTEM FEATURES (1-3)
             "1"  { Enable-WindowsSandbox; Pause }
             "2"  { Enable-HyperV; Pause }
             "3"  { Install-WSL2; Pause }
+            
+            # WINDOWS CUSTOMIZATIONS (4-6)
             "4"  { Enable-ClassicRightClick; Pause }
             "5"  { Enable-TaskbarEndTask; Pause }
             "6"  { Disable-FastBoot; Pause }
+            
+            # BROWSERS (7-8)
             "7"  { Install-ChromeEnterprise; Pause }
             "8"  { Install-Firefox; Pause }
+            
+            # ESSENTIAL APPLICATIONS (9-25)
             "9"  { Install-7Zip; Pause }
             "10" { Install-BCUninstaller; Pause }
             "11" { Install-BulkRenameUtility; Pause }
@@ -1001,34 +2333,89 @@ function Start-MainMenu {
             "23" { Install-PeaZip; Pause }
             "24" { Install-PrusaSlicer; Pause }
             "25" { Install-Tabby; Pause }
+            
+            # DEVELOPER SETUP (26-28)
             "26" { Setup-SSHKeyAndGit; Pause }
             "27" { Setup-GitOnly; Pause }
             "28" { Set-ComputerHostname; Pause }
-            "29" { Update-AllApps; Pause }
-            "30" { 
+            
+            # SECURITY & PRIVACY (29-33)
+            "29" { Disable-WindowsTelemetry; Pause }
+            "30" { Remove-WindowsBloatware; Pause }
+            "31" { Disable-Cortana; Pause }
+            "32" { Configure-DefenderExclusions; Pause }
+            "33" { Disable-WindowsUpdateAutoRestart; Pause }
+            
+            # PERFORMANCE & SYSTEM (34-38)
+            "34" { Set-HighPerformancePower; Pause }
+            "35" { Disable-VisualEffects; Pause }
+            "36" { Configure-VirtualMemory; Pause }
+            "37" { Invoke-SystemCleanup; Pause }
+            "38" { Disable-StartupPrograms; Pause }
+            
+            # DEVELOPMENT ENVIRONMENT (39-44)
+            "39" { Install-WindowsTerminal; Pause }
+            "40" { Install-PackageManagers; Pause }
+            "41" { Install-DockerDesktop; Pause }
+            "42" { Setup-DevFolderStructure; Pause }
+            "43" { Install-NodeJS; Pause }
+            "44" { Install-Python; Pause }
+            
+            # NETWORK & CONNECTIVITY (45-48)
+            "45" { Configure-DNSSettings; Pause }
+            "46" { Enable-SSHServer; Pause }
+            "47" { Configure-RemoteDesktop; Pause }
+            "48" { Optimize-NetworkSettings; Pause }
+            
+            # FILE SYSTEM & UI (49-53)
+            "49" { Show-FileExtensions; Pause }
+            "50" { Show-HiddenFiles; Pause }
+            "51" { Configure-DarkMode; Pause }
+            "52" { Set-DefaultApps; Pause }
+            "53" { Configure-TaskbarCustomizations; Pause }
+            
+            # BACKUP & RECOVERY (54-56)
+            "54" { Create-SystemRestorePoint; Pause }
+            "55" { Export-InstalledPrograms; Pause }
+            "56" { Configure-WindowsBackup; Pause }
+            
+            # ENTERPRISE/PROFESSIONAL (57-60)
+            "57" { Configure-DomainJoin; Pause }
+            "58" { Configure-ProxySettings; Pause }
+            "59" { Install-Certificates; Pause }
+            "60" { Configure-GroupPolicies; Pause }
+            
+            # BULK OPERATIONS (61-62)
+            "61" { Update-AllApps; Pause }
+            "62" { 
                 $confirm = Read-Host "This will install all applications only (no system features). Continue? (Y/N)"
                 if ($confirm -eq "Y" -or $confirm -eq "y") {
                     Install-AllApplications
                 }
                 Pause
             }
-            "31" { 
-                $confirm = Read-Host "This will install everything (features + apps + customizations + git setup). Continue? (Y/N)"
+            
+            # INSTALL EVERYTHING (63)
+            "63" { 
+                $confirm = Read-Host "This will install EVERYTHING (features + apps + optimizations + security). Continue? (Y/N)"
                 if ($confirm -eq "Y" -or $confirm -eq "y") {
                     Install-Everything
                 }
                 Pause
             }
-            "32" { 
+            
+            # EXIT (64)
+            "64" { 
                 Write-Log "Exiting script..." "INFO"
                 break 
             }
+            
             default { 
-                Write-Host "Invalid choice. Please select 1-32." -ForegroundColor Red
+                Write-Host "Invalid choice. Please select 1-64." -ForegroundColor Red
                 Start-Sleep -Seconds 2
             }
         }
-    } while ($choice -ne "32")
+    } while ($choice -ne "64")
 }
 
 function Pause {
