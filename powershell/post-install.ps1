@@ -1,6 +1,6 @@
 #=============================================================================
 # Windows Post-Installation Setup Script
-# Author: SystemAdmin Pro
+# Author: Claire R
 # Version: 2.1.0
 # Last Updated: June 2025
 # Purpose: Automated Windows system setup after fresh installation
@@ -382,6 +382,263 @@ function Install-PrusaSlicer { Install-SingleApp -AppName "PrusaSlicer" -WingetI
 function Install-Tabby { Install-SingleApp -AppName "Tabby" -WingetID "Eugeny.Tabby" }
 
 #=============================================================================
+# DEVELOPER SETUP FUNCTIONS
+#=============================================================================
+
+function Setup-SSHKeyAndGit {
+    Write-Log "`n=== Setting up SSH Key + Git Configuration ===" "INFO"
+    
+    try {
+        # Get computer name for SSH key comment
+        $computerName = $env:COMPUTERNAME
+        $sshKeyPath = "$env:USERPROFILE\.ssh\id_ed25519"
+        $sshKeyPubPath = "$env:USERPROFILE\.ssh\id_ed25519.pub"
+        
+        # Create .ssh directory if it doesn't exist
+        $sshDir = "$env:USERPROFILE\.ssh"
+        if (!(Test-Path $sshDir)) {
+            New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+            Write-Log "Created .ssh directory" "INFO"
+        }
+        
+        # Check if SSH key already exists
+        if (Test-Path $sshKeyPath) {
+            Write-Log "BEFORE: SSH key already exists at $sshKeyPath" "WARNING"
+            Write-Host ""
+            Write-Host "An SSH key already exists!" -ForegroundColor Yellow
+            Write-Host "1. Create new key (backup existing)" -ForegroundColor White
+            Write-Host "2. Replace existing key" -ForegroundColor White
+            Write-Host "3. Skip SSH key creation" -ForegroundColor White
+            $choice = Read-Host "Choose option (1-3)"
+            
+            switch ($choice) {
+                "1" {
+                    # Backup existing key
+                    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+                    Copy-Item $sshKeyPath "$sshKeyPath.backup_$timestamp" -Force
+                    Copy-Item $sshKeyPubPath "$sshKeyPubPath.backup_$timestamp" -Force
+                    Write-Log "Backed up existing SSH key with timestamp" "SUCCESS"
+                }
+                "2" {
+                    Write-Log "Will replace existing SSH key" "INFO"
+                }
+                "3" {
+                    Write-Log "Skipping SSH key creation, proceeding to Git setup..." "INFO"
+                    Setup-GitConfiguration
+                    return
+                }
+                default {
+                    Write-Log "Invalid choice, skipping SSH key setup" "ERROR"
+                    return
+                }
+            }
+        } else {
+            Write-Log "BEFORE: No SSH key found, will create new one" "INFO"
+        }
+        
+        # Generate SSH key with computer name as comment
+        Write-Log "Generating ed25519 SSH key..."
+        $keyComment = "$computerName@$computerName"
+        
+        # Use ssh-keygen to generate the key
+        $sshKeygenArgs = @(
+            "-t", "ed25519"
+            "-f", $sshKeyPath
+            "-C", $keyComment
+            "-N", '""'  # Empty passphrase
+        )
+        
+        Start-Process "ssh-keygen" -ArgumentList $sshKeygenArgs -Wait -WindowStyle Hidden
+        
+        if (Test-Path $sshKeyPath -and Test-Path $sshKeyPubPath) {
+            Write-Log "AFTER: SSH key generated successfully!" "SUCCESS"
+            Write-Log "Private key: $sshKeyPath" "INFO"
+            Write-Log "Public key: $sshKeyPubPath" "INFO"
+            
+            # Display the public key
+            $publicKey = Get-Content $sshKeyPubPath
+            Write-Log "`nYour SSH Public Key:" "INFO"
+            Write-Host $publicKey -ForegroundColor Green
+            Write-Host "`nCopy this key to your Git hosting service (GitHub, GitLab, etc.)" -ForegroundColor Yellow
+        } else {
+            Write-Log "Failed to generate SSH key" "ERROR"
+            return
+        }
+        
+        # Start SSH agent and add key
+        Write-Log "Starting SSH agent and adding key..."
+        Start-Service ssh-agent -ErrorAction SilentlyContinue
+        ssh-add $sshKeyPath 2>$null
+        
+        Write-Log "SSH key setup completed successfully!" "SUCCESS"
+        
+        # Now configure Git
+        Setup-GitConfiguration
+        
+    }
+    catch {
+        Write-Log "Failed to setup SSH key: $($_)" "ERROR"
+    }
+}
+
+function Setup-GitConfiguration {
+    Write-Log "`n=== Configuring Git ===" "INFO"
+    
+    try {
+        # Check if git is installed
+        if (!(Test-CommandExists "git")) {
+            Write-Log "Git is not installed! Please install Git first (option 14)." "ERROR"
+            return
+        }
+        
+        # Get current git configuration
+        $currentName = git config --global user.name 2>$null
+        $currentEmail = git config --global user.email 2>$null
+        
+        if ($currentName) {
+            Write-Log "BEFORE: Git user.name = '$currentName'" "INFO"
+        } else {
+            Write-Log "BEFORE: Git user.name not set" "INFO"
+        }
+        
+        if ($currentEmail) {
+            Write-Log "BEFORE: Git user.email = '$currentEmail'" "INFO"
+        } else {
+            Write-Log "BEFORE: Git user.email not set" "INFO"
+        }
+        
+        # Get user input for Git configuration
+        Write-Host "`nGit Configuration Setup:" -ForegroundColor Cyan
+        
+        if ($currentName) {
+            $newName = Read-Host "Git user name (current: $currentName, press Enter to keep)"
+            if ([string]::IsNullOrWhiteSpace($newName)) {
+                $newName = $currentName
+            }
+        } else {
+            $newName = Read-Host "Enter your Git user name"
+        }
+        
+        if ($currentEmail) {
+            $newEmail = Read-Host "Git user email (current: $currentEmail, press Enter to keep)"
+            if ([string]::IsNullOrWhiteSpace($newEmail)) {
+                $newEmail = $currentEmail
+            }
+        } else {
+            $newEmail = Read-Host "Enter your Git user email"
+        }
+        
+        # Configure Git with best practices
+        Write-Log "Applying Git configuration and best practices..."
+        
+        # Basic user configuration
+        git config --global user.name "$newName"
+        git config --global user.email "$newEmail"
+        
+        # Best practices configuration
+        git config --global init.defaultBranch main
+        git config --global pull.rebase true
+        git config --global push.default simple
+        git config --global core.autocrlf true  # Windows line endings
+        git config --global core.editor "notepad"
+        git config --global credential.helper manager-core
+        git config --global fetch.prune true
+        git config --global rebase.autoStash true
+        
+        # Useful aliases
+        git config --global alias.st status
+        git config --global alias.co checkout
+        git config --global alias.br branch
+        git config --global alias.ci commit
+        git config --global alias.unstage "reset HEAD --"
+        git config --global alias.last "log -1 HEAD"
+        git config --global alias.visual "!gitk"
+        git config --global alias.lg "log --oneline --decorate --graph --all"
+        
+        # Safety configurations
+        git config --global safe.directory "*"
+        
+        Write-Log "AFTER: Git user.name = '$newName'" "SUCCESS"
+        Write-Log "AFTER: Git user.email = '$newEmail'" "SUCCESS"
+        Write-Log "Applied Git best practices:" "SUCCESS"
+        Write-Log "- Default branch: main" "INFO"
+        Write-Log "- Pull strategy: rebase" "INFO"
+        Write-Log "- Line endings: Windows (CRLF)" "INFO"
+        Write-Log "- Credential helper: manager-core" "INFO"
+        Write-Log "- Added useful aliases (st, co, br, ci, lg, etc.)" "INFO"
+        Write-Log "- Enabled auto-stash and prune" "INFO"
+        
+        Write-Log "Git configuration completed successfully!" "SUCCESS"
+        
+    }
+    catch {
+        Write-Log "Failed to configure Git: $($_)" "ERROR"
+    }
+}
+
+function Setup-GitOnly {
+    Write-Log "`n=== Setting up Git Configuration Only ===" "INFO"
+    Setup-GitConfiguration
+}
+
+function Set-ComputerHostname {
+    Write-Log "`n=== Setting Computer Hostname ===" "INFO"
+    
+    try {
+        # Get current computer name
+        $currentName = $env:COMPUTERNAME
+        Write-Log "BEFORE: Current computer name is '$currentName'" "INFO"
+        
+        Write-Host "`nComputer Hostname Setup:" -ForegroundColor Cyan
+        Write-Host "Current computer name: $currentName" -ForegroundColor Yellow
+        $newName = Read-Host "Enter new computer name (or press Enter to cancel)"
+        
+        if ([string]::IsNullOrWhiteSpace($newName)) {
+            Write-Log "Computer name change cancelled" "INFO"
+            return
+        }
+        
+        # Validate computer name (basic validation)
+        if ($newName.Length -gt 15) {
+            Write-Log "Computer name must be 15 characters or less" "ERROR"
+            return
+        }
+        
+        if ($newName -match '[^a-zA-Z0-9\-]') {
+            Write-Log "Computer name can only contain letters, numbers, and hyphens" "ERROR"
+            return
+        }
+        
+        if ($newName -eq $currentName) {
+            Write-Log "New name is the same as current name" "INFO"
+            return
+        }
+        
+        Write-Log "Changing computer name to '$newName'..."
+        
+        # Use Rename-Computer cmdlet
+        Rename-Computer -NewName $newName -Force
+        
+        Write-Log "AFTER: Computer name changed to '$newName'" "SUCCESS"
+        Write-Log "A system restart is REQUIRED for the name change to take effect!" "WARNING"
+        
+        $restart = Read-Host "Would you like to restart now? (Y/N)"
+        if ($restart -eq "Y" -or $restart -eq "y") {
+            Write-Log "Restarting computer in 10 seconds..." "WARNING"
+            Write-Host "Restarting in 10 seconds... Press Ctrl+C to cancel" -ForegroundColor Red
+            Start-Sleep -Seconds 10
+            Restart-Computer -Force
+        } else {
+            Write-Log "Please restart your computer manually to complete the hostname change" "INFO"
+        }
+        
+    }
+    catch {
+        Write-Log "Failed to change computer hostname: $($_)" "ERROR"
+    }
+}
+
+#=============================================================================
 # WINDOWS CUSTOMIZATION FUNCTIONS
 #=============================================================================
 
@@ -470,6 +727,48 @@ function Enable-TaskbarEndTask {
     }
 }
 
+function Disable-FastBoot {
+    Write-Log "`n=== Disabling Fast Boot ===" "INFO"
+    
+    try {
+        # Registry path for Fast Boot setting
+        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power"
+        $regName = "HiberbootEnabled"
+        
+        # Check current state before making changes
+        $currentValue = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
+        if ($currentValue) {
+            if ($currentValue.HiberbootEnabled -eq 0) {
+                Write-Log "BEFORE: Fast Boot is already disabled" "INFO"
+                Write-Log "Fast Boot is already disabled!" "SUCCESS"
+                return
+            } else {
+                Write-Log "BEFORE: Fast Boot is currently enabled (value: $($currentValue.HiberbootEnabled))" "INFO"
+            }
+        } else {
+            Write-Log "BEFORE: Fast Boot registry value not found (default enabled)" "INFO"
+        }
+        
+        Write-Log "Disabling Fast Boot..."
+        
+        # Set HiberbootEnabled to 0 to disable Fast Boot
+        Set-ItemProperty -Path $regPath -Name $regName -Value 0 -Type DWord -Force
+        
+        # Verify the change
+        $newValue = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
+        if ($newValue -and $newValue.HiberbootEnabled -eq 0) {
+            Write-Log "AFTER: Fast Boot is now disabled (value: $($newValue.HiberbootEnabled))" "SUCCESS"
+            Write-Log "Fast Boot disabled successfully!" "SUCCESS"
+            Write-Log "A system restart is required for changes to take effect." "WARNING"
+        } else {
+            Write-Log "Failed to verify Fast Boot disable setting" "ERROR"
+        }
+    }
+    catch {
+        Write-Log "Failed to disable Fast Boot: $($_)" "ERROR"
+    }
+}
+
 function Disable-ClassicRightClick {
     Write-Log "`n=== Restoring Windows 11 Right-Click Menu ===" "INFO"
     
@@ -528,18 +827,9 @@ function Update-AllApps {
     }
 }
 
-function Install-Everything {
-    Write-Log "`n=== INSTALLING EVERYTHING - ONE-CLICK SETUP ===" "INFO"
-    Write-Log "This will install all components. Please be patient..." "INFO"
-    
-    # Install system features
-    Enable-WindowsSandbox
-    Enable-HyperV
-    Install-WSL2
-    
-    # Windows customizations
-    Enable-ClassicRightClick
-    Enable-TaskbarEndTask
+function Install-AllApplications {
+    Write-Log "`n=== INSTALLING ALL APPLICATIONS ONLY ===" "INFO"
+    Write-Log "This will install browsers and essential applications only (no system features or customizations)..." "INFO"
     
     # Install browsers
     Install-ChromeEnterprise
@@ -564,8 +854,53 @@ function Install-Everything {
     Install-PrusaSlicer
     Install-Tabby
     
+    Write-Log "`n=== ALL APPLICATIONS INSTALLATION FINISHED ===" "SUCCESS"
+}
+
+function Install-Everything {
+    Write-Log "`n=== INSTALLING EVERYTHING - ONE-CLICK SETUP ===" "INFO"
+    Write-Log "This will install all components. Please be patient..." "INFO"
+    
+    # Install system features
+    Enable-WindowsSandbox
+    Enable-HyperV
+    Install-WSL2
+    
+    # Windows customizations
+    Enable-ClassicRightClick
+    Enable-TaskbarEndTask
+    Disable-FastBoot
+    
+    # Install browsers
+    Install-ChromeEnterprise
+    Install-Firefox
+    
+    # Install all essential apps
+    Install-7Zip
+    Install-BCUninstaller
+    Install-BulkRenameUtility
+    Install-CPUZ
+    Install-FileConverter
+    Install-Git
+    Install-GitExtensions
+    Install-GoogleChrome
+    Install-Krita
+    Install-LogiOptionsPlus
+    Install-MozillaFirefox
+    Install-NotepadPlusPlus
+    Install-OpenSCAD
+    Install-VirtualBox
+    Install-PeaZip
+    Install-PrusaSlicer
+    Install-Tabby
+    
+    # Developer setup (Git configuration only, user can manually setup SSH if needed)
+    Write-Log "`n=== Setting up Git Configuration ===" "INFO"
+    Setup-GitConfiguration
+    
     Write-Log "`n=== COMPLETE INSTALLATION FINISHED ===" "SUCCESS"
     Write-Log "Note: A system restart is required to complete the installation of some features." "WARNING"
+    Write-Log "Reminder: You can use option 26 to setup SSH keys for Git if needed." "INFO"
 }
 
 #=============================================================================
@@ -576,7 +911,7 @@ function Show-Menu {
     Clear-Host
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "    Windows Post-Installation Setup Script    " -ForegroundColor White
-    Write-Host "           Author: SystemAdmin Pro            " -ForegroundColor Gray
+    Write-Host "           Author: Claire R                   " -ForegroundColor Gray
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "SYSTEM FEATURES:" -ForegroundColor Yellow
@@ -587,36 +922,43 @@ function Show-Menu {
     Write-Host "WINDOWS CUSTOMIZATIONS:" -ForegroundColor Yellow
     Write-Host " 4.  Enable Classic Right-Click Menu" -ForegroundColor White
     Write-Host " 5.  Enable End Task in Taskbar" -ForegroundColor White
+    Write-Host " 6.  Disable Fast Boot" -ForegroundColor White
     Write-Host ""
     Write-Host "BROWSERS:" -ForegroundColor Yellow
-    Write-Host " 6.  Install Chrome Enterprise" -ForegroundColor White
-    Write-Host " 7.  Install Mozilla Firefox" -ForegroundColor White
+    Write-Host " 7.  Install Chrome Enterprise" -ForegroundColor White
+    Write-Host " 8.  Install Mozilla Firefox" -ForegroundColor White
     Write-Host ""
     Write-Host "ESSENTIAL APPLICATIONS:" -ForegroundColor Yellow
-    Write-Host " 8.  Install 7-Zip" -ForegroundColor White
-    Write-Host " 9.  Install BCUninstaller" -ForegroundColor White
-    Write-Host " 10. Install Bulk Rename Utility" -ForegroundColor White
-    Write-Host " 11. Install CPU-Z" -ForegroundColor White
-    Write-Host " 12. Install File Converter" -ForegroundColor White
-    Write-Host " 13. Install Git" -ForegroundColor White
-    Write-Host " 14. Install Git Extensions" -ForegroundColor White
-    Write-Host " 15. Install Google Chrome" -ForegroundColor White
-    Write-Host " 16. Install Krita" -ForegroundColor White
-    Write-Host " 17. Install Logi Options+" -ForegroundColor White
-    Write-Host " 18. Install Mozilla Firefox" -ForegroundColor White
-    Write-Host " 19. Install Notepad++" -ForegroundColor White
-    Write-Host " 20. Install OpenSCAD" -ForegroundColor White
-    Write-Host " 21. Install VirtualBox" -ForegroundColor White
-    Write-Host " 22. Install PeaZip" -ForegroundColor White
-    Write-Host " 23. Install PrusaSlicer" -ForegroundColor White
-    Write-Host " 24. Install Tabby" -ForegroundColor White
+    Write-Host " 9.  Install 7-Zip" -ForegroundColor White
+    Write-Host " 10. Install BCUninstaller" -ForegroundColor White
+    Write-Host " 11. Install Bulk Rename Utility" -ForegroundColor White
+    Write-Host " 12. Install CPU-Z" -ForegroundColor White
+    Write-Host " 13. Install File Converter" -ForegroundColor White
+    Write-Host " 14. Install Git" -ForegroundColor White
+    Write-Host " 15. Install Git Extensions" -ForegroundColor White
+    Write-Host " 16. Install Google Chrome" -ForegroundColor White
+    Write-Host " 17. Install Krita" -ForegroundColor White
+    Write-Host " 18. Install Logi Options+" -ForegroundColor White
+    Write-Host " 19. Install Mozilla Firefox" -ForegroundColor White
+    Write-Host " 20. Install Notepad++" -ForegroundColor White
+    Write-Host " 21. Install OpenSCAD" -ForegroundColor White
+    Write-Host " 22. Install VirtualBox" -ForegroundColor White
+    Write-Host " 23. Install PeaZip" -ForegroundColor White
+    Write-Host " 24. Install PrusaSlicer" -ForegroundColor White
+    Write-Host " 25. Install Tabby" -ForegroundColor White
+    Write-Host ""
+    Write-Host "DEVELOPER SETUP:" -ForegroundColor Magenta
+    Write-Host " 26. Setup SSH Key + Git Configuration" -ForegroundColor White
+    Write-Host " 27. Setup Git Only (no SSH key)" -ForegroundColor White
+    Write-Host " 28. Set Computer Hostname" -ForegroundColor White
     Write-Host ""
     Write-Host "BULK OPERATIONS:" -ForegroundColor Green
-    Write-Host " 25. Update All Apps via Winget" -ForegroundColor White
+    Write-Host " 29. Update All Installed Apps via Winget" -ForegroundColor White
+    Write-Host " 30. Install All Applications Only" -ForegroundColor White
     Write-Host ""
-    Write-Host " 26. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
+    Write-Host " 31. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
     Write-Host ""
-    Write-Host " 27. Exit" -ForegroundColor Red
+    Write-Host " 32. Exit" -ForegroundColor Red
     Write-Host ""
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "Log file: $script:LogPath" -ForegroundColor Gray
@@ -631,7 +973,7 @@ function Start-MainMenu {
     
     do {
         Show-Menu
-        $choice = Read-Host "Enter your choice (1-27)"
+        $choice = Read-Host "Enter your choice (1-32)"
         
         switch ($choice) {
             "1"  { Enable-WindowsSandbox; Pause }
@@ -639,43 +981,54 @@ function Start-MainMenu {
             "3"  { Install-WSL2; Pause }
             "4"  { Enable-ClassicRightClick; Pause }
             "5"  { Enable-TaskbarEndTask; Pause }
-            "6"  { Install-ChromeEnterprise; Pause }
-            "7"  { Install-Firefox; Pause }
-            "8"  { Install-7Zip; Pause }
-            "9"  { Install-BCUninstaller; Pause }
-            "10" { Install-BulkRenameUtility; Pause }
-            "11" { Install-CPUZ; Pause }
-            "12" { Install-FileConverter; Pause }
-            "13" { Install-Git; Pause }
-            "14" { Install-GitExtensions; Pause }
-            "15" { Install-GoogleChrome; Pause }
-            "16" { Install-Krita; Pause }
-            "17" { Install-LogiOptionsPlus; Pause }
-            "18" { Install-MozillaFirefox; Pause }
-            "19" { Install-NotepadPlusPlus; Pause }
-            "20" { Install-OpenSCAD; Pause }
-            "21" { Install-VirtualBox; Pause }
-            "22" { Install-PeaZip; Pause }
-            "23" { Install-PrusaSlicer; Pause }
-            "24" { Install-Tabby; Pause }
-            "25" { Update-AllApps; Pause }
-            "26" { 
-                $confirm = Read-Host "This will install everything. Continue? (Y/N)"
+            "6"  { Disable-FastBoot; Pause }
+            "7"  { Install-ChromeEnterprise; Pause }
+            "8"  { Install-Firefox; Pause }
+            "9"  { Install-7Zip; Pause }
+            "10" { Install-BCUninstaller; Pause }
+            "11" { Install-BulkRenameUtility; Pause }
+            "12" { Install-CPUZ; Pause }
+            "13" { Install-FileConverter; Pause }
+            "14" { Install-Git; Pause }
+            "15" { Install-GitExtensions; Pause }
+            "16" { Install-GoogleChrome; Pause }
+            "17" { Install-Krita; Pause }
+            "18" { Install-LogiOptionsPlus; Pause }
+            "19" { Install-MozillaFirefox; Pause }
+            "20" { Install-NotepadPlusPlus; Pause }
+            "21" { Install-OpenSCAD; Pause }
+            "22" { Install-VirtualBox; Pause }
+            "23" { Install-PeaZip; Pause }
+            "24" { Install-PrusaSlicer; Pause }
+            "25" { Install-Tabby; Pause }
+            "26" { Setup-SSHKeyAndGit; Pause }
+            "27" { Setup-GitOnly; Pause }
+            "28" { Set-ComputerHostname; Pause }
+            "29" { Update-AllApps; Pause }
+            "30" { 
+                $confirm = Read-Host "This will install all applications only (no system features). Continue? (Y/N)"
+                if ($confirm -eq "Y" -or $confirm -eq "y") {
+                    Install-AllApplications
+                }
+                Pause
+            }
+            "31" { 
+                $confirm = Read-Host "This will install everything (features + apps + customizations + git setup). Continue? (Y/N)"
                 if ($confirm -eq "Y" -or $confirm -eq "y") {
                     Install-Everything
                 }
                 Pause
             }
-            "27" { 
+            "32" { 
                 Write-Log "Exiting script..." "INFO"
                 break 
             }
             default { 
-                Write-Host "Invalid choice. Please select 1-27." -ForegroundColor Red
+                Write-Host "Invalid choice. Please select 1-32." -ForegroundColor Red
                 Start-Sleep -Seconds 2
             }
         }
-    } while ($choice -ne "27")
+    } while ($choice -ne "32")
 }
 
 function Pause {
