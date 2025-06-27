@@ -1,7 +1,7 @@
 #=============================================================================
 # Windows Post-Installation Setup Script
 # Author: Claire R
-# Version: 2.3.0
+# Version: 2.4.0
 # Last Updated: June 2025
 # Purpose: Automated Windows system setup after fresh installation
 #
@@ -14,6 +14,7 @@
 # - Or use the bypass method shown above
 #
 # CHANGELOG:
+# v2.4.0 (June 2025) - Corrected script structure to resolve ParserError.
 # v2.3.0 (June 2025) - Added driver backup and restore functionality.
 # v2.2.0 (June 2025) - Added undo/revert options for many settings. Added Rust installer.
 # v2.1.0 (June 2025) - Expanded menu with individual app installations
@@ -408,15 +409,19 @@ function Disable-WindowsTelemetry {
         Set-ItemProperty -Path $regPath -Name "AllowTelemetry" -Value 0 -Type DWord -Force
         
         # Disable activity feed
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableActivityFeed" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        $sysPolPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
+        if (!(Test-Path $sysPolPath)) { New-Item -Path $sysPolPath -Force | Out-Null }
+        Set-ItemProperty -Path $sysPolPath -Name "EnableActivityFeed" -Value 0 -Type DWord -Force
         
         # Disable advertising ID
-        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo"
-        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
-        Set-ItemProperty -Path $regPath -Name "DisabledByGroupPolicy" -Value 1 -Type DWord -Force
+        $adInfoPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo"
+        if (!(Test-Path $adInfoPath)) { New-Item -Path $adInfoPath -Force | Out-Null }
+        Set-ItemProperty -Path $adInfoPath -Name "DisabledByGroupPolicy" -Value 1 -Type DWord -Force
         
         # Disable location tracking
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors" -Name "DisableLocation" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+        $locationPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"
+        if (!(Test-Path $locationPath)) { New-Item -Path $locationPath -Force | Out-Null }
+        Set-ItemProperty -Path $locationPath -Name "DisableLocation" -Value 1 -Type DWord -Force
         
         Write-Log "AFTER: Telemetry disabled (level 0)" "SUCCESS"
         Write-Log "Windows telemetry and data collection disabled successfully!" "SUCCESS"
@@ -435,29 +440,17 @@ function Restore-DefaultTelemetry {
         Write-Log "Restoring default telemetry and privacy settings..."
         
         # The cleanest way to restore defaults is to remove the policies, letting the OS manage them.
-        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
-        if (Test-Path $regPath) {
-            Remove-ItemProperty -Path $regPath -Name "AllowTelemetry" -Force -ErrorAction SilentlyContinue
-            Write-Log "Restored default telemetry level" "SUCCESS"
-        }
+        Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Name "AllowTelemetry" -Force -ErrorAction SilentlyContinue
+        Write-Log "Restored default telemetry level" "SUCCESS"
         
-        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
-        if (Test-Path $regPath) {
-            Remove-ItemProperty -Path $regPath -Name "EnableActivityFeed" -Force -ErrorAction SilentlyContinue
-            Write-Log "Restored default activity feed setting" "SUCCESS"
-        }
+        Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "EnableActivityFeed" -Force -ErrorAction SilentlyContinue
+        Write-Log "Restored default activity feed setting" "SUCCESS"
 
-        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo"
-        if (Test-Path $regPath) {
-            Remove-ItemProperty -Path $regPath -Name "DisabledByGroupPolicy" -Force -ErrorAction SilentlyContinue
-            Write-Log "Restored default advertising ID setting" "SUCCESS"
-        }
+        Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo" -Name "DisabledByGroupPolicy" -Force -ErrorAction SilentlyContinue
+        Write-Log "Restored default advertising ID setting" "SUCCESS"
         
-        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"
-        if (Test-Path $regPath) {
-            Remove-ItemProperty -Path $regPath -Name "DisableLocation" -Force -ErrorAction SilentlyContinue
-            Write-Log "Restored default location tracking setting" "SUCCESS"
-        }
+        Remove-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors" -Name "DisableLocation" -Force -ErrorAction SilentlyContinue
+        Write-Log "Restored default location tracking setting" "SUCCESS"
         
         Write-Log "Default telemetry and data collection settings restored!" "SUCCESS"
         Write-Log "A restart is recommended for all changes to take effect." "INFO"
@@ -1007,8 +1000,7 @@ function Install-PackageManagers {
         if (Test-CommandExists "choco") {
             Write-Log "Chocolatey is already installed!" "SUCCESS"
         } else {
-            $chocoInstallScript = Invoke-RestMethod https://chocolatey.org/install.ps1
-            Invoke-Expression $chocoInstallScript
+            Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
             
             if (Test-CommandExists "choco") {
                 Write-Log "Chocolatey installed successfully!" "SUCCESS"
@@ -1023,7 +1015,8 @@ function Install-PackageManagers {
         if (Test-CommandExists "scoop") {
             Write-Log "Scoop is already installed!" "SUCCESS"
         } else {
-            Invoke-RestMethod get.scoop.sh | Invoke-Expression
+            Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+            irm get.scoop.sh | iex
             
             if (Test-CommandExists "scoop") {
                 Write-Log "Scoop installed successfully!" "SUCCESS"
@@ -1132,7 +1125,7 @@ function Install-NodeJS {
     if ($script:WingetInstalled) {
         try {
             Write-Log "Installing Node.js LTS via winget..."
-            winget install --id OpenJS.NodeJS --exact --silent --accept-package-agreements --accept-source-agreements
+            winget install --id OpenJS.NodeJS.LTS --exact --silent --accept-package-agreements --accept-source-agreements
             
             if ($LASTEXITCODE -eq 0) {
                 Write-Log "Node.js installed successfully!" "SUCCESS"
@@ -1340,7 +1333,9 @@ function Optimize-NetworkSettings {
         netsh int tcp set global dca=enabled
         
         # Disable bandwidth throttling
-        New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 4294967295 -PropertyType DWORD -Force -ErrorAction SilentlyContinue
+        $mmPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
+        if (!(Test-Path $mmPath)) { New-Item -Path $mmPath -Force | Out-Null }
+        Set-ItemProperty -Path $mmPath -Name "NetworkThrottlingIndex" -Value 4294967295 -PropertyType DWord -Force
         
         Write-Log "Network optimizations applied successfully!" "SUCCESS"
         Write-Log "Optimizations include TCP auto-tuning, RSS, and bandwidth throttling removal" "INFO"
@@ -1363,6 +1358,7 @@ function Show-FileExtensions {
         $currentValue = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -ErrorAction SilentlyContinue
         if ($currentValue -and $currentValue.HideFileExt -eq 0) {
             Write-Log "BEFORE: File extensions are already visible" "INFO"
+            return
         } else {
             Write-Log "BEFORE: File extensions are hidden" "INFO"
         }
@@ -1410,6 +1406,7 @@ function Show-HiddenFiles {
         $currentValue = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -ErrorAction SilentlyContinue
         if ($currentValue -and $currentValue.Hidden -eq 1) {
             Write-Log "BEFORE: Hidden files are already visible" "INFO"
+            return
         } else {
             Write-Log "BEFORE: Hidden files are not visible" "INFO"
         }
@@ -1457,7 +1454,6 @@ function Configure-DarkMode {
     try {
         # Check current theme
         $currentAppTheme = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -ErrorAction SilentlyContinue
-        $currentSystemTheme = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -ErrorAction SilentlyContinue
         
         if ($currentAppTheme -and $currentAppTheme.AppsUseLightTheme -eq 0) {
             Write-Log "BEFORE: Dark mode is already enabled for apps" "INFO"
@@ -1472,17 +1468,20 @@ function Configure-DarkMode {
         
         $choice = Read-Host "Choose theme option (1-3)"
         
+        $themesPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        if (!(Test-Path $themesPath)) { New-Item -Path $themesPath -Force | Out-Null }
+        
         switch ($choice) {
             "1" {
                 Write-Log "Enabling Dark Mode..." "INFO"
-                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
-                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
+                Set-ItemProperty -Path $themesPath -Name "AppsUseLightTheme" -Value 0 -Type DWord -Force
+                Set-ItemProperty -Path $themesPath -Name "SystemUsesLightTheme" -Value 0 -Type DWord -Force
                 Write-Log "AFTER: Dark Mode enabled!" "SUCCESS"
             }
             "2" {
                 Write-Log "Enabling Light Mode..." "INFO"
-                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "AppsUseLightTheme" -Value 1 -Type DWord -Force
-                Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "SystemUsesLightTheme" -Value 1 -Type DWord -Force
+                Set-ItemProperty -Path $themesPath -Name "AppsUseLightTheme" -Value 1 -Type DWord -Force
+                Set-ItemProperty -Path $themesPath -Name "SystemUsesLightTheme" -Value 1 -Type DWord -Force
                 Write-Log "AFTER: Light Mode enabled!" "SUCCESS"
             }
             "3" {
@@ -1614,7 +1613,8 @@ function Export-InstalledPrograms {
     Write-Log "`n=== Exporting Installed Programs List ===" "INFO"
     
     try {
-        $outputPath = "$env:USERPROFILE\Desktop\InstalledPrograms_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
+        $desktopPath = [Environment]::GetFolderPath("Desktop")
+        $outputPath = Join-Path -Path $desktopPath -ChildPath "InstalledPrograms_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
         
         Write-Log "Generating installed programs list..." "INFO"
         
@@ -1711,6 +1711,7 @@ function Backup-Drivers {
             Write-Log "Compressing backup to $zipFilePath..." "INFO"
             Compress-Archive -Path "$backupFolderPath\*" -DestinationPath $zipFilePath -Force
             Write-Log "ZIP archive created successfully at: $zipFilePath" "SUCCESS"
+            Write-Log "You may remove the uncompressed folder: $backupFolderPath" "INFO"
         } else {
             Write-Log "Skipping ZIP compression." "INFO"
         }
@@ -1768,6 +1769,7 @@ function Restore-Drivers {
     }
 }
 
+
 #=============================================================================
 # ENTERPRISE/PROFESSIONAL FUNCTIONS
 #=============================================================================
@@ -1782,7 +1784,7 @@ function Configure-DomainJoin {
         if ($computerSystem.PartOfDomain) {
             Write-Log "BEFORE: Computer is already joined to domain: $($computerSystem.Domain)" "INFO"
             $unjoin = Read-Host "Do you want to unjoin from the current domain? (Y/N)"
-            if ($unjoin -eq "Y" -or $unjoin -eq "y") {
+            if ($unjoin -match '^(y|Y)$') {
                 Write-Log "Please use 'Remove-Computer' cmdlet manually for domain unjoin" "INFO"
                 return
             } else {
@@ -1913,7 +1915,7 @@ function Install-Certificates {
                 $certPath = Read-Host "Enter full path to certificate file (.cer, .crt, .p12, .pfx)"
                 if (Test-Path $certPath) {
                     Write-Log "Opening certificate: $certPath" "INFO"
-                    Start-Process $certPath
+                    Invoke-Item $certPath
                     Write-Log "Certificate import wizard launched" "SUCCESS"
                 } else {
                     Write-Log "Certificate file not found: $certPath" "ERROR"
@@ -1943,22 +1945,27 @@ function Configure-GroupPolicies {
         Write-Log "Opening Local Group Policy Editor..." "INFO"
         
         # Check if gpedit.msc is available (Pro/Enterprise editions)
-        try {
-            Start-Process "gpedit.msc"
-            Write-Log "Local Group Policy Editor opened successfully!" "SUCCESS"
-            Write-Log "Common policy configurations:" "INFO"
-            Write-Log "- Computer Configuration > Administrative Templates > Windows Components" "INFO"
-            Write-Log "- User Configuration > Administrative Templates > System" "INFO"
-            Write-Log "- Security Settings > Local Policies > Security Options" "INFO"
+        if (Test-Path "$env:SystemRoot\System32\gpedit.msc") {
+            try {
+                Start-Process "gpedit.msc"
+                Write-Log "Local Group Policy Editor opened successfully!" "SUCCESS"
+                Write-Log "Common policy configurations:" "INFO"
+                Write-Log "- Computer Configuration > Administrative Templates > Windows Components" "INFO"
+                Write-Log "- User Configuration > Administrative Templates > System" "INFO"
+                Write-Log "- Security Settings > Local Policies > Security Options" "INFO"
+            }
+            catch {
+                Write-Log "Failed to start Group Policy Editor: $_" "ERROR"
+            }
         }
-        catch {
+        else {
             Write-Log "Local Group Policy Editor not available (requires Pro/Enterprise edition)" "WARNING"
             Write-Log "Alternative: Use Registry Editor or PowerShell for policy-like configurations" "INFO"
         }
         
     }
     catch {
-        Write-Log "Failed to open Group Policy Editor: $($_)" "ERROR"
+        Write-Log "An unexpected error occurred while trying to open Group Policy Editor: $($_)" "ERROR"
     }
 }
 
@@ -1971,7 +1978,6 @@ function Setup-SSHKeyAndGit {
     
     try {
         # Get computer name for SSH key comment
-        $computerName = $env:COMPUTERNAME
         $sshKeyPath = "$env:USERPROFILE\.ssh\id_ed25519"
         $sshKeyPubPath = "$env:USERPROFILE\.ssh\id_ed25519.pub"
         
@@ -2022,14 +2028,7 @@ function Setup-SSHKeyAndGit {
         $keyComment = "$env:USERNAME@$env:COMPUTERNAME"
         
         # Use ssh-keygen to generate the key
-        $sshKeygenArgs = @(
-            "-t", "ed25519"
-            "-f", $sshKeyPath
-            "-C", $keyComment
-            "-N", '""'  # Empty passphrase
-        )
-        
-        Start-Process "ssh-keygen" -ArgumentList $sshKeygenArgs -Wait -WindowStyle Hidden
+        ssh-keygen.exe -t ed25519 -f $sshKeyPath -C $keyComment -N '""'
         
         if (Test-Path $sshKeyPath -and Test-Path $sshKeyPubPath) {
             Write-Log "AFTER: SSH key generated successfully!" "SUCCESS"
@@ -2091,22 +2090,14 @@ function Setup-GitConfiguration {
         # Get user input for Git configuration
         Write-Host "`nGit Configuration Setup:" -ForegroundColor Cyan
         
-        if ($currentName) {
-            $newName = Read-Host "Git user name (current: $currentName, press Enter to keep)"
-            if ([string]::IsNullOrWhiteSpace($newName)) {
-                $newName = $currentName
-            }
-        } else {
-            $newName = Read-Host "Enter your Git user name"
+        $newName = Read-Host "Enter your Git user name (current: $currentName, press Enter to keep)"
+        if ([string]::IsNullOrWhiteSpace($newName)) {
+            $newName = $currentName
         }
         
-        if ($currentEmail) {
-            $newEmail = Read-Host "Git user email (current: $currentEmail, press Enter to keep)"
-            if ([string]::IsNullOrWhiteSpace($newEmail)) {
-                $newEmail = $currentEmail
-            }
-        } else {
-            $newEmail = Read-Host "Enter your Git user email"
+        $newEmail = Read-Host "Enter your Git user email (current: $currentEmail, press Enter to keep)"
+        if ([string]::IsNullOrWhiteSpace($newEmail)) {
+            $newEmail = $currentEmail
         }
         
         # Configure Git with best practices
@@ -2204,7 +2195,7 @@ function Set-ComputerHostname {
         Write-Log "A system restart is REQUIRED for the name change to take effect!" "WARNING"
         
         $restart = Read-Host "Would you like to restart now? (Y/N)"
-        if ($restart -eq "Y" -or $restart -eq "y") {
+        if ($restart -match '^(y|Y)$') {
             Write-Log "Restarting computer in 10 seconds..." "WARNING"
             Write-Host "Restarting in 10 seconds... Press Ctrl+C to cancel" -ForegroundColor Red
             Start-Sleep -Seconds 10
@@ -2228,7 +2219,8 @@ function Enable-ClassicRightClick {
     
     try {
         # Check current state
-        $currentValue = Get-ItemProperty -Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" -Name "(Default)" -ErrorAction SilentlyContinue
+        $regPath = "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
+        $currentValue = Get-ItemProperty -Path $regPath -Name "(Default)" -ErrorAction SilentlyContinue
         
         if ($currentValue) {
             Write-Log "Classic right-click menu is already enabled!" "SUCCESS"
@@ -2236,9 +2228,6 @@ function Enable-ClassicRightClick {
         }
         
         Write-Log "Configuring registry for classic context menu..."
-        
-        # Create the registry path if it doesn't exist
-        $regPath = "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32"
         
         if (!(Test-Path $regPath)) {
             New-Item -Path $regPath -Force | Out-Null
@@ -2252,7 +2241,7 @@ function Enable-ClassicRightClick {
         
         # Offer to restart Explorer
         $restart = Read-Host "Would you like to restart Explorer now? (Y/N)"
-        if ($restart -eq "Y" -or $restart -eq "y") {
+        if ($restart -match '^(y|Y)$') {
             Write-Log "Restarting Explorer..."
             Stop-Process -Name explorer -Force
             Start-Sleep -Seconds 2
@@ -2290,7 +2279,7 @@ function Enable-TaskbarEndTask {
         
         # Offer to restart Explorer
         $restart = Read-Host "Would you like to restart Explorer now? (Y/N)"
-        if ($restart -eq "Y" -or $restart -eq "y") {
+        if ($restart -match '^(y|Y)$') {
             Write-Log "Restarting Explorer..."
             Stop-Process -Name explorer -Force
             Start-Sleep -Seconds 2
@@ -2314,7 +2303,7 @@ function Disable-TaskbarEndTask {
             
             # Offer to restart Explorer
             $restart = Read-Host "Would you like to restart Explorer now? (Y/N)"
-            if ($restart -eq "Y" -or $restart -eq "y") {
+            if ($restart -match '^(y|Y)$') {
                 Write-Log "Restarting Explorer..."
                 Stop-Process -Name explorer -Force
                 Start-Sleep -Seconds 2
@@ -2403,7 +2392,7 @@ function Disable-ClassicRightClick {
             
             # Offer to restart Explorer
             $restart = Read-Host "Would you like to restart Explorer now? (Y/N)"
-            if ($restart -eq "Y" -or $restart -eq "y") {
+            if ($restart -match '^(y|Y)$') {
                 Write-Log "Restarting Explorer..."
                 Stop-Process -Name explorer -Force
                 Start-Sleep -Seconds 2
@@ -2559,7 +2548,7 @@ function Show-Menu {
     Clear-Host
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "    Windows Post-Installation Setup Script    " -ForegroundColor White
-    Write-Host "           Author: Claire R (v2.3.0)          " -ForegroundColor Gray
+    Write-Host "           Author: Claire R (v2.4.0)          " -ForegroundColor Gray
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "SYSTEM FEATURES:" -ForegroundColor Yellow
@@ -2672,7 +2661,7 @@ function Show-Menu {
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "Log file: $script:LogPath" -ForegroundColor Gray
     Write-Host ""
-    Write-Host "Press Enter to exit, or choose an option:" -ForegroundColor Yellow
+    Write-Host "Enter your choice:" -ForegroundColor Yellow
 }
 
 function Start-MainMenu {
@@ -2683,12 +2672,12 @@ function Start-MainMenu {
     
     do {
         Show-Menu
-        $choice = Read-Host "Enter your choice"
+        $choice = Read-Host
         
         # Handle empty input (just Enter key) - exit script
         if ([string]::IsNullOrWhiteSpace($choice)) {
             Write-Log "No option selected, exiting script..." "INFO"
-            break
+            $choice = "100" # Set choice to exit value
         }
         
         switch ($choice) {
@@ -2706,8 +2695,8 @@ function Start-MainMenu {
             "9"  { Enable-FastBoot; Pause }
             
             # BROWSERS (10-11)
-            "10"  { Install-ChromeEnterprise; Pause }
-            "11"  { Install-Firefox; Pause }
+            "10" { Install-ChromeEnterprise; Pause }
+            "11" { Install-Firefox; Pause }
             
             # ESSENTIAL APPLICATIONS (12-28)
             "12" { Install-7Zip; Pause }
@@ -2795,7 +2784,7 @@ function Start-MainMenu {
             "76" { Update-AllApps; Pause }
             "77" { 
                 $confirm = Read-Host "This will install all applications only (no system features). Continue? (Y/N)"
-                if ($confirm -eq "Y" -or $confirm -eq "y") {
+                if ($confirm -match '^(y|Y)$') {
                     Install-AllApplications
                 }
                 Pause
@@ -2828,7 +2817,7 @@ function Start-MainMenu {
                 Start-Sleep -Seconds 2
             }
         }
-    } while ($choice -ne "100" -and ![string]::IsNullOrWhiteSpace($choice))
+    } while ($choice -ne "100")
 }
 
 function Pause {
