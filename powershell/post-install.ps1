@@ -1,7 +1,7 @@
 #=============================================================================
 # Windows Post-Installation Setup Script
 # Author: Claire R
-# Version: 2.2.0
+# Version: 2.3.0
 # Last Updated: June 2025
 # Purpose: Automated Windows system setup after fresh installation
 #
@@ -14,6 +14,7 @@
 # - Or use the bypass method shown above
 #
 # CHANGELOG:
+# v2.3.0 (June 2025) - Added driver backup and restore functionality.
 # v2.2.0 (June 2025) - Added undo/revert options for many settings. Added Rust installer.
 # v2.1.0 (June 2025) - Expanded menu with individual app installations
 # v2.0.0 (June 2025) - Complete rewrite with modular architecture
@@ -1185,7 +1186,7 @@ function Configure-DNSSettings {
     
     try {
         # Get network adapters
-        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and $_.MediaType -eq "802.3" }
+        $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" -and ($_.MediaType -eq "802.3" -or $_.MediaType -eq "Wireless") }
         
         if ($adapters.Count -eq 0) {
             Write-Log "No active network adapters found" "ERROR"
@@ -1689,6 +1690,84 @@ function Configure-WindowsBackup {
     }
 }
 
+function Backup-Drivers {
+    Write-Log "`n=== Backing Up All Third-Party Drivers ===" "INFO"
+    
+    try {
+        $date = Get-Date -Format "yyyy-MM-dd"
+        $desktopPath = [Environment]::GetFolderPath("Desktop")
+        $backupFolderPath = Join-Path -Path $desktopPath -ChildPath "DriverBackup-$date"
+        $zipFilePath = "$desktopPath\DriverBackup-$date.zip"
+        
+        Write-Log "Creating backup folder: $backupFolderPath" "INFO"
+        New-Item -Path $backupFolderPath -ItemType Directory -Force | Out-Null
+        
+        Write-Log "Exporting drivers. This may take a few minutes..." "INFO"
+        Export-WindowsDriver -Online -Destination $backupFolderPath -ErrorAction Stop
+        Write-Log "Drivers exported successfully to: $backupFolderPath" "SUCCESS"
+        
+        $zipChoice = Read-Host "Do you want to compress the backup into a .zip file? (Y/N)"
+        if ($zipChoice -match '^(y|Y)$') {
+            Write-Log "Compressing backup to $zipFilePath..." "INFO"
+            Compress-Archive -Path "$backupFolderPath\*" -DestinationPath $zipFilePath -Force
+            Write-Log "ZIP archive created successfully at: $zipFilePath" "SUCCESS"
+        } else {
+            Write-Log "Skipping ZIP compression." "INFO"
+        }
+        
+        Write-Log "Driver backup complete!" "SUCCESS"
+    }
+    catch {
+        Write-Log "An error occurred during driver backup: $_" "ERROR"
+    }
+}
+
+function Restore-Drivers {
+    Write-Log "`n=== Restoring Drivers from Backup ===" "INFO"
+
+    try {
+        # Load Windows Forms for the file dialog
+        Add-Type -AssemblyName System.Windows.Forms
+
+        # Create and configure the OpenFileDialog
+        $dialog = New-Object System.Windows.Forms.OpenFileDialog
+        $dialog.Title = "Select driver backup ZIP file"
+        $dialog.Filter = "ZIP files (*.zip)|*.zip"
+        $dialog.Multiselect = $false
+
+        if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+            Write-Log "No ZIP file selected. Restore operation cancelled." "WARNING"
+            return
+        }
+
+        $zipPath = $dialog.FileName
+        Write-Log "Selected backup file: $zipPath" "INFO"
+
+        # Use the script's temp path for extraction
+        $tempExtractPath = Join-Path $script:TempPath "DriverRestore"
+        if (Test-Path $tempExtractPath) {
+            Remove-Item -Path $tempExtractPath -Recurse -Force
+        }
+        
+        Write-Log "Extracting ZIP to temporary folder: $tempExtractPath" "INFO"
+        Expand-Archive -Path $zipPath -DestinationPath $tempExtractPath -Force
+
+        Write-Log "Scanning for drivers to install..." "INFO"
+        # The /install switch will automatically handle duplicates and newer versions.
+        # It recursively searches the directory for all valid driver packages.
+        pnputil /add-driver "$tempExtractPath\*.inf" /subdirs /install
+
+        Write-Log "Driver restore process completed. Check console output above for details." "SUCCESS"
+        Write-Log "It is recommended to restart the system to finalize driver installations." "WARNING"
+        
+        # Clean up the extraction folder
+        Remove-Item -Path $tempExtractPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    catch {
+        Write-Log "An error occurred during driver restore: $_" "ERROR"
+    }
+}
+
 #=============================================================================
 # ENTERPRISE/PROFESSIONAL FUNCTIONS
 #=============================================================================
@@ -1940,7 +2019,7 @@ function Setup-SSHKeyAndGit {
         
         # Generate SSH key with computer name as comment
         Write-Log "Generating ed25519 SSH key..."
-        $keyComment = "$computerName@$computerName"
+        $keyComment = "$env:USERNAME@$env:COMPUTERNAME"
         
         # Use ssh-keygen to generate the key
         $sshKeygenArgs = @(
@@ -1989,7 +2068,7 @@ function Setup-GitConfiguration {
     try {
         # Check if git is installed
         if (!(Test-CommandExists "git")) {
-            Write-Log "Git is not installed! Please install Git first (option 14)." "ERROR"
+            Write-Log "Git is not installed! Please install Git first (option 17)." "ERROR"
             return
         }
         
@@ -2191,25 +2270,20 @@ function Enable-TaskbarEndTask {
     
     try {
         # Registry path for the End Task feature
-        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings"
+        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
         
         # Check if already enabled
-        $currentValue = Get-ItemProperty -Path $regPath -Name "TaskbarEndTask" -ErrorAction SilentlyContinue
+        $currentValue = Get-ItemProperty -Path $regPath -Name "TaskbarDeveloperSettings" -ErrorAction SilentlyContinue
         
-        if ($currentValue -and $currentValue.TaskbarEndTask -eq 1) {
+        if ($currentValue -and $currentValue.TaskbarDeveloperSettings -eq 1) {
             Write-Log "End Task in taskbar is already enabled!" "SUCCESS"
             return
         }
         
         Write-Log "Configuring registry for End Task in taskbar..."
         
-        # Create the registry path if it doesn't exist
-        if (!(Test-Path $regPath)) {
-            New-Item -Path $regPath -Force | Out-Null
-        }
-        
         # Enable End Task in taskbar (DWORD value = 1)
-        Set-ItemProperty -Path $regPath -Name "TaskbarEndTask" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $regPath -Name "TaskbarDeveloperSettings" -Value 1 -Type DWord -Force
         
         Write-Log "End Task in taskbar enabled successfully!" "SUCCESS"
         Write-Log "You need to restart Explorer or log off/on for changes to take effect." "INFO"
@@ -2233,10 +2307,20 @@ function Disable-TaskbarEndTask {
     Write-Log "`n=== Disabling End Task in Taskbar Right-Click ===" "INFO"
     
     try {
-        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings"
-        if(Test-Path $regPath) {
-            Remove-ItemProperty -Path $regPath -Name "TaskbarEndTask" -Force -ErrorAction SilentlyContinue
+        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+        if(Get-ItemProperty -Path $regPath -Name "TaskbarDeveloperSettings" -ErrorAction SilentlyContinue) {
+            Set-ItemProperty -Path $regPath -Name "TaskbarDeveloperSettings" -Value 0 -Type DWord -Force
             Write-Log "'End Task' feature disabled in taskbar right-click." "SUCCESS"
+            
+            # Offer to restart Explorer
+            $restart = Read-Host "Would you like to restart Explorer now? (Y/N)"
+            if ($restart -eq "Y" -or $restart -eq "y") {
+                Write-Log "Restarting Explorer..."
+                Stop-Process -Name explorer -Force
+                Start-Sleep -Seconds 2
+                Start-Process explorer
+                Write-Log "Explorer restarted successfully!" "SUCCESS"
+            }
         } else {
             Write-Log "'End Task' feature is already disabled." "INFO"
         }
@@ -2475,7 +2559,7 @@ function Show-Menu {
     Clear-Host
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "    Windows Post-Installation Setup Script    " -ForegroundColor White
-    Write-Host "           Author: Claire R (v2.2.0)          " -ForegroundColor Gray
+    Write-Host "           Author: Claire R (v2.3.0)          " -ForegroundColor Gray
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "SYSTEM FEATURES:" -ForegroundColor Yellow
@@ -2568,16 +2652,18 @@ function Show-Menu {
     Write-Host " 67. Create System Restore Point" -ForegroundColor White
     Write-Host " 68. Export Installed Programs List" -ForegroundColor White
     Write-Host " 69. Configure Windows Backup (Opens Settings)" -ForegroundColor White
+    Write-Host " 70. Backup All Drivers to Desktop" -ForegroundColor White
+    Write-Host " 71. Restore Drivers from ZIP Backup" -ForegroundColor White
     Write-Host ""
     Write-Host "ENTERPRISE/PROFESSIONAL:" -ForegroundColor Gray
-    Write-Host " 70. Domain Join Assistant" -ForegroundColor White
-    Write-Host " 71. Configure Proxy Settings" -ForegroundColor White
-    Write-Host " 72. Install Certificates (Guidance)" -ForegroundColor White
-    Write-Host " 73. Configure Group Policies (Opens gpedit.msc)" -ForegroundColor White
+    Write-Host " 72. Domain Join Assistant" -ForegroundColor White
+    Write-Host " 73. Configure Proxy Settings" -ForegroundColor White
+    Write-Host " 74. Install Certificates (Guidance)" -ForegroundColor White
+    Write-Host " 75. Configure Group Policies (Opens gpedit.msc)" -ForegroundColor White
     Write-Host ""
     Write-Host "BULK OPERATIONS:" -ForegroundColor Green
-    Write-Host " 74. Update All Installed Apps via Winget" -ForegroundColor White
-    Write-Host " 75. Install All Applications Only" -ForegroundColor White
+    Write-Host " 76. Update All Installed Apps via Winget" -ForegroundColor White
+    Write-Host " 77. Install All Applications Only" -ForegroundColor White
     Write-Host ""
     Write-Host " 999. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
     Write-Host ""
@@ -2597,7 +2683,7 @@ function Start-MainMenu {
     
     do {
         Show-Menu
-        $choice = Read-Host "Enter your choice (1-75, 999, 100)"
+        $choice = Read-Host "Enter your choice"
         
         # Handle empty input (just Enter key) - exit script
         if ([string]::IsNullOrWhiteSpace($choice)) {
@@ -2692,20 +2778,22 @@ function Start-MainMenu {
             "65" { Configure-TaskbarCustomizations; Pause }
             "66" { Restore-DefaultTaskbar; Pause }
             
-            # BACKUP & RECOVERY (67-69)
+            # BACKUP & RECOVERY (67-71)
             "67" { Create-SystemRestorePoint; Pause }
             "68" { Export-InstalledPrograms; Pause }
             "69" { Configure-WindowsBackup; Pause }
+            "70" { Backup-Drivers; Pause }
+            "71" { Restore-Drivers; Pause }
             
-            # ENTERPRISE/PROFESSIONAL (70-73)
-            "70" { Configure-DomainJoin; Pause }
-            "71" { Configure-ProxySettings; Pause }
-            "72" { Install-Certificates; Pause }
-            "73" { Configure-GroupPolicies; Pause }
+            # ENTERPRISE/PROFESSIONAL (72-75)
+            "72" { Configure-DomainJoin; Pause }
+            "73" { Configure-ProxySettings; Pause }
+            "74" { Install-Certificates; Pause }
+            "75" { Configure-GroupPolicies; Pause }
             
-            # BULK OPERATIONS (74-75)
-            "74" { Update-AllApps; Pause }
-            "75" { 
+            # BULK OPERATIONS (76-77)
+            "76" { Update-AllApps; Pause }
+            "77" { 
                 $confirm = Read-Host "This will install all applications only (no system features). Continue? (Y/N)"
                 if ($confirm -eq "Y" -or $confirm -eq "y") {
                     Install-AllApplications
