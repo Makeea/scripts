@@ -1,7 +1,7 @@
 #=============================================================================
 # Windows Post-Installation Setup Script
 # Author: Claire R
-# Version: 2.1.0
+# Version: 2.2.0
 # Last Updated: June 2025
 # Purpose: Automated Windows system setup after fresh installation
 #
@@ -14,6 +14,7 @@
 # - Or use the bypass method shown above
 #
 # CHANGELOG:
+# v2.2.0 (June 2025) - Added undo/revert options for many settings. Added Rust installer.
 # v2.1.0 (June 2025) - Expanded menu with individual app installations
 # v2.0.0 (June 2025) - Complete rewrite with modular architecture
 # v1.5.0 (May 2025) - Added WSL2 and Ubuntu installation
@@ -380,6 +381,7 @@ function Install-VirtualBox { Install-SingleApp -AppName "VirtualBox" -WingetID 
 function Install-PeaZip { Install-SingleApp -AppName "PeaZip" -WingetID "Giorgiotani.Peazip" }
 function Install-PrusaSlicer { Install-SingleApp -AppName "PrusaSlicer" -WingetID "Prusa3D.PrusaSlicer" }
 function Install-Tabby { Install-SingleApp -AppName "Tabby" -WingetID "Eugeny.Tabby" }
+function Install-Rust { Install-SingleApp -AppName "Rust" -WingetID "Rustlang.Rustup" }
 
 #=============================================================================
 # SECURITY & PRIVACY FUNCTIONS
@@ -422,6 +424,45 @@ function Disable-WindowsTelemetry {
     }
     catch {
         Write-Log "Failed to disable telemetry: $($_)" "ERROR"
+    }
+}
+
+function Restore-DefaultTelemetry {
+    Write-Log "`n=== Restoring Default Telemetry & Data Collection ===" "INFO"
+    
+    try {
+        Write-Log "Restoring default telemetry and privacy settings..."
+        
+        # The cleanest way to restore defaults is to remove the policies, letting the OS manage them.
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
+        if (Test-Path $regPath) {
+            Remove-ItemProperty -Path $regPath -Name "AllowTelemetry" -Force -ErrorAction SilentlyContinue
+            Write-Log "Restored default telemetry level" "SUCCESS"
+        }
+        
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
+        if (Test-Path $regPath) {
+            Remove-ItemProperty -Path $regPath -Name "EnableActivityFeed" -Force -ErrorAction SilentlyContinue
+            Write-Log "Restored default activity feed setting" "SUCCESS"
+        }
+
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo"
+        if (Test-Path $regPath) {
+            Remove-ItemProperty -Path $regPath -Name "DisabledByGroupPolicy" -Force -ErrorAction SilentlyContinue
+            Write-Log "Restored default advertising ID setting" "SUCCESS"
+        }
+        
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"
+        if (Test-Path $regPath) {
+            Remove-ItemProperty -Path $regPath -Name "DisableLocation" -Force -ErrorAction SilentlyContinue
+            Write-Log "Restored default location tracking setting" "SUCCESS"
+        }
+        
+        Write-Log "Default telemetry and data collection settings restored!" "SUCCESS"
+        Write-Log "A restart is recommended for all changes to take effect." "INFO"
+    }
+    catch {
+        Write-Log "Failed to restore telemetry settings: $($_)" "ERROR"
     }
 }
 
@@ -523,6 +564,30 @@ function Disable-Cortana {
     }
 }
 
+function Enable-Cortana {
+    Write-Log "`n=== Enabling Cortana ===" "INFO"
+    
+    try {
+        Write-Log "Enabling Cortana by removing group policies..."
+        
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
+        if (Test-Path $regPath) {
+            Remove-ItemProperty -Path $regPath -Name "AllowCortana" -Force -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $regPath -Name "DisableWebSearch" -Force -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $regPath -Name "ConnectedSearchUseWeb" -Force -ErrorAction SilentlyContinue
+            Write-Log "AFTER: Cortana policies removed. Cortana is now enabled." "SUCCESS"
+            Write-Log "A restart is recommended for changes to take effect." "INFO"
+        }
+        else {
+            Write-Log "No Cortana policies found. Cortana should already be enabled." "INFO"
+        }
+    }
+    catch {
+        Write-Log "Failed to enable Cortana: $($_)" "ERROR"
+    }
+}
+
+
 function Configure-DefenderExclusions {
     Write-Log "`n=== Configuring Windows Defender Exclusions ===" "INFO"
     
@@ -576,6 +641,51 @@ function Configure-DefenderExclusions {
     }
 }
 
+function Remove-DefenderExclusions {
+    Write-Log "`n=== Removing Windows Defender Exclusions ===" "INFO"
+    
+    try {
+        # List of previously added folders and extensions
+        $devFolders = @(
+            "$env:USERPROFILE\Documents\GitHub",
+            "$env:USERPROFILE\Documents\Projects",
+            "$env:USERPROFILE\Source",
+            "C:\Dev",
+            "C:\Projects",
+            "$env:USERPROFILE\AppData\Local\Temp"
+        )
+        $devExtensions = @(".tmp", ".log", ".cache", ".node_modules")
+        
+        Write-Log "Removing development-related Defender exclusions..." "INFO"
+        
+        foreach ($folder in $devFolders) {
+            try {
+                Remove-MpPreference -ExclusionPath $folder -ErrorAction SilentlyContinue
+                Write-Log "Removed exclusion: $folder" "SUCCESS"
+            }
+            catch {
+                Write-Log "Failed to remove exclusion for: $folder" "WARNING"
+            }
+        }
+        
+        foreach ($ext in $devExtensions) {
+            try {
+                Remove-MpPreference -ExclusionExtension $ext -ErrorAction SilentlyContinue
+                Write-Log "Removed extension exclusion: $ext" "SUCCESS"
+            }
+            catch {
+                Write-Log "Failed to remove extension exclusion: $ext" "WARNING"
+            }
+        }
+        
+        Write-Log "Windows Defender exclusions removed successfully!" "SUCCESS"
+    }
+    catch {
+        Write-Log "Failed to remove Defender exclusions: $($_)" "ERROR"
+    }
+}
+
+
 function Disable-WindowsUpdateAutoRestart {
     Write-Log "`n=== Disabling Windows Update Auto-Restart ===" "INFO"
     
@@ -607,6 +717,29 @@ function Disable-WindowsUpdateAutoRestart {
     }
 }
 
+function Enable-WindowsUpdateAutoRestart {
+    Write-Log "`n=== Enabling Windows Update Auto-Restart ===" "INFO"
+    
+    try {
+        Write-Log "Enabling Windows Update auto-restart by removing group policies..."
+        
+        $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+        if (Test-Path $regPath) {
+            Remove-ItemProperty -Path $regPath -Name "NoAutoRebootWithLoggedOnUsers" -Force -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $regPath -Name "AUOptions" -Force -ErrorAction SilentlyContinue
+            Write-Log "AFTER: Windows Update auto-restart policies removed." "SUCCESS"
+        }
+        else {
+            Write-Log "No auto-restart policies found. Default behavior is already active." "INFO"
+        }
+        
+        Write-Log "Windows Update auto-restart settings restored to default!" "SUCCESS"
+    }
+    catch {
+        Write-Log "Failed to enable Windows Update auto-restart: $($_)" "ERROR"
+    }
+}
+
 #=============================================================================
 # PERFORMANCE & SYSTEM FUNCTIONS
 #=============================================================================
@@ -632,6 +765,28 @@ function Set-HighPerformancePower {
     }
     catch {
         Write-Log "Failed to set High Performance power plan: $($_)" "ERROR"
+    }
+}
+
+function Set-BalancedPower {
+    Write-Log "`n=== Setting Balanced Power Plan ===" "INFO"
+    
+    try {
+        $currentPlan = powercfg /getactivescheme
+        Write-Log "BEFORE: $currentPlan" "INFO"
+        
+        Write-Log "Setting Balanced (default) power plan..."
+        
+        # GUID for Balanced power plan
+        $balancedGuid = "381b4222-f694-41f0-9685-ff5bb260df2e"
+        powercfg /setactive $balancedGuid
+        
+        $newPlan = powercfg /getactivescheme
+        Write-Log "AFTER: $newPlan" "SUCCESS"
+        Write-Log "Balanced power plan activated!" "SUCCESS"
+    }
+    catch {
+        Write-Log "Failed to set Balanced power plan: $($_)" "ERROR"
     }
 }
 
@@ -664,6 +819,29 @@ function Disable-VisualEffects {
     }
     catch {
         Write-Log "Failed to disable visual effects: $($_)" "ERROR"
+    }
+}
+
+function Enable-VisualEffects {
+    Write-Log "`n=== Enabling Visual Effects for Appearance ===" "INFO"
+    
+    try {
+        Write-Log "Configuring visual effects for best appearance..."
+        
+        # Set to best appearance mode (1 = best appearance)
+        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
+        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        Set-ItemProperty -Path $regPath -Name "VisualFXSetting" -Value 1 -Type DWord -Force
+        
+        # Reset UserPreferencesMask to default (letting Windows manage it)
+        Remove-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Force -ErrorAction SilentlyContinue
+        
+        Write-Log "AFTER: Visual effects set to best appearance" "SUCCESS"
+        Write-Log "Visual effects enabled for best appearance!" "SUCCESS"
+        Write-Log "Changes will take effect after next login." "INFO"
+    }
+    catch {
+        Write-Log "Failed to enable visual effects: $($_)" "ERROR"
     }
 }
 
@@ -1024,26 +1202,41 @@ function Configure-DNSSettings {
         Write-Host "1. Cloudflare (1.1.1.1, 1.0.0.1) - Fast & Privacy-focused" -ForegroundColor White
         Write-Host "2. Google (8.8.8.8, 8.8.4.4) - Reliable & Fast" -ForegroundColor White
         Write-Host "3. Quad9 (9.9.9.9, 149.112.112.112) - Security-focused" -ForegroundColor White
-        Write-Host "4. Skip DNS configuration" -ForegroundColor White
+        Write-Host "4. Restore to Automatic (DHCP)" -ForegroundColor Yellow
+        Write-Host "5. Skip DNS configuration" -ForegroundColor White
         
-        $choice = Read-Host "Choose DNS provider (1-4)"
+        $choice = Read-Host "Choose DNS provider (1-5)"
         
-        $dnsServers = switch ($choice) {
-            "1" { @("1.1.1.1", "1.0.0.1"); "Cloudflare" }
-            "2" { @("8.8.8.8", "8.8.4.4"); "Google" }
-            "3" { @("9.9.9.9", "149.112.112.112"); "Quad9" }
-            "4" { Write-Log "DNS configuration skipped" "INFO"; return }
+        $dnsServers = $null
+        $providerName = ""
+
+        switch ($choice) {
+            "1" { $dnsServers = @("1.1.1.1", "1.0.0.1"); $providerName = "Cloudflare" }
+            "2" { $dnsServers = @("8.8.8.8", "8.8.4.4"); $providerName = "Google" }
+            "3" { $dnsServers = @("9.9.9.9", "149.112.112.112"); $providerName = "Quad9" }
+            "4" { # Restore to DHCP
+                Write-Log "Setting DNS to Automatic (DHCP)..." "INFO"
+                foreach ($adapter in $adapters) {
+                    try {
+                        Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ResetServerAddresses
+                        Write-Log "Restored DNS for adapter: $($adapter.Name)" "SUCCESS"
+                    }
+                    catch {
+                        Write-Log "Failed to restore DNS for adapter: $($adapter.Name)" "WARNING"
+                    }
+                }
+                Write-Log "AFTER: DNS configuration restored to Automatic (DHCP)!" "SUCCESS"
+                return
+            }
+            "5" { Write-Log "DNS configuration skipped" "INFO"; return }
             default { Write-Log "Invalid choice, skipping DNS configuration" "ERROR"; return }
         }
         
-        $providerName = $dnsServers[1]
-        $servers = $dnsServers[0]
-        
-        Write-Log "Setting DNS to $providerName ($($servers -join ', '))..." "INFO"
+        Write-Log "Setting DNS to $providerName ($($dnsServers -join ', '))..." "INFO"
         
         foreach ($adapter in $adapters) {
             try {
-                Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ServerAddresses $servers
+                Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ServerAddresses $dnsServers
                 Write-Log "Updated DNS for adapter: $($adapter.Name)" "SUCCESS"
             }
             catch {
@@ -1052,7 +1245,7 @@ function Configure-DNSSettings {
         }
         
         Write-Log "AFTER: DNS configuration completed!" "SUCCESS"
-        Write-Log "New DNS servers: $($servers -join ', ')" "INFO"
+        Write-Log "New DNS servers: $($dnsServers -join ', ')" "INFO"
         
     }
     catch {
@@ -1192,6 +1385,22 @@ function Show-FileExtensions {
     }
 }
 
+function Hide-FileExtensions {
+    Write-Log "`n=== Hiding File Extensions ===" "INFO"
+    
+    try {
+        Write-Log "Hiding file extension display..." "INFO"
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "HideFileExt" -Value 1 -Type DWord -Force
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Seconds 2
+        Start-Process explorer
+        Write-Log "AFTER: File extensions are now hidden!" "SUCCESS"
+    }
+    catch {
+        Write-Log "Failed to hide file extensions: $($_)" "ERROR"
+    }
+}
+
 function Show-HiddenFiles {
     Write-Log "`n=== Showing Hidden Files ===" "INFO"
     
@@ -1221,6 +1430,23 @@ function Show-HiddenFiles {
     }
     catch {
         Write-Log "Failed to show hidden files: $($_)" "ERROR"
+    }
+}
+
+function Hide-HiddenFiles {
+    Write-Log "`n=== Hiding Hidden Files ===" "INFO"
+    
+    try {
+        Write-Log "Hiding hidden files display..." "INFO"
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Hidden" -Value 0 -Type DWord -Force
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowSuperHidden" -Value 0 -Type DWord -Force
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Seconds 2
+        Start-Process explorer
+        Write-Log "AFTER: Hidden files are now hidden (default)!" "SUCCESS"
+    }
+    catch {
+        Write-Log "Failed to hide hidden files: $($_)" "ERROR"
     }
 }
 
@@ -1327,6 +1553,29 @@ function Configure-TaskbarCustomizations {
     }
     catch {
         Write-Log "Failed to configure taskbar customizations: $($_)" "ERROR"
+    }
+}
+
+function Restore-DefaultTaskbar {
+    Write-Log "`n=== Restoring Default Taskbar Settings ===" "INFO"
+    
+    try {
+        Write-Log "Restoring default taskbar settings..." "INFO"
+        
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search" -Name "SearchboxTaskbarMode" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowTaskViewButton" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarDa" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarSmallIcons" -Value 0 -Type DWord -Force
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarGlomLevel" -Value 0 -Type DWord -Force
+        
+        Stop-Process -Name explorer -Force
+        Start-Sleep -Seconds 2
+        Start-Process explorer
+        
+        Write-Log "Default taskbar settings restored successfully!" "SUCCESS"
+    }
+    catch {
+        Write-Log "Failed to restore taskbar settings: $($_)" "ERROR"
     }
 }
 
@@ -1980,6 +2229,23 @@ function Enable-TaskbarEndTask {
     }
 }
 
+function Disable-TaskbarEndTask {
+    Write-Log "`n=== Disabling End Task in Taskbar Right-Click ===" "INFO"
+    
+    try {
+        $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced\TaskbarDeveloperSettings"
+        if(Test-Path $regPath) {
+            Remove-ItemProperty -Path $regPath -Name "TaskbarEndTask" -Force -ErrorAction SilentlyContinue
+            Write-Log "'End Task' feature disabled in taskbar right-click." "SUCCESS"
+        } else {
+            Write-Log "'End Task' feature is already disabled." "INFO"
+        }
+    }
+    catch {
+        Write-Log "Failed to disable 'End Task' in taskbar: $($_)" "ERROR"
+    }
+}
+
 function Disable-FastBoot {
     Write-Log "`n=== Disabling Fast Boot ===" "INFO"
     
@@ -2019,6 +2285,24 @@ function Disable-FastBoot {
     }
     catch {
         Write-Log "Failed to disable Fast Boot: $($_)" "ERROR"
+    }
+}
+
+function Enable-FastBoot {
+    Write-Log "`n=== Enabling Fast Boot ===" "INFO"
+    
+    try {
+        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power"
+        $regName = "HiberbootEnabled"
+        
+        Write-Log "Enabling Fast Boot..."
+        Set-ItemProperty -Path $regPath -Name $regName -Value 1 -Type DWord -Force
+        
+        Write-Log "AFTER: Fast Boot is now enabled." "SUCCESS"
+        Write-Log "A system restart is required for changes to take effect." "WARNING"
+    }
+    catch {
+        Write-Log "Failed to enable Fast Boot: $($_)" "ERROR"
     }
 }
 
@@ -2168,6 +2452,7 @@ function Install-Everything {
     Setup-DevFolderStructure
     Install-NodeJS
     Install-Python
+    Install-Rust
     
     # Network optimizations
     Configure-DNSSettings
@@ -2190,7 +2475,7 @@ function Show-Menu {
     Clear-Host
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "    Windows Post-Installation Setup Script    " -ForegroundColor White
-    Write-Host "           Author: Claire R                   " -ForegroundColor Gray
+    Write-Host "           Author: Claire R (v2.2.0)          " -ForegroundColor Gray
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "SYSTEM FEATURES:" -ForegroundColor Yellow
@@ -2199,91 +2484,104 @@ function Show-Menu {
     Write-Host " 3.  Install WSL2 with Ubuntu" -ForegroundColor White
     Write-Host ""
     Write-Host "WINDOWS CUSTOMIZATIONS:" -ForegroundColor Yellow
-    Write-Host " 4.  Enable Classic Right-Click Menu" -ForegroundColor White
-    Write-Host " 5.  Enable End Task in Taskbar" -ForegroundColor White
-    Write-Host " 6.  Disable Fast Boot" -ForegroundColor White
+    Write-Host " 4.  Enable Classic Right-Click Menu (Win10 Style)" -ForegroundColor White
+    Write-Host " 5.  Restore Default Right-Click Menu (Win11 Style)" -ForegroundColor Yellow
+    Write-Host " 6.  Enable 'End Task' in Taskbar Right-Click" -ForegroundColor White
+    Write-Host " 7.  Disable 'End Task' in Taskbar Right-Click" -ForegroundColor Yellow
+    Write-Host " 8.  Disable Fast Boot (Recommended)" -ForegroundColor White
+    Write-Host " 9.  Enable Fast Boot" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "BROWSERS:" -ForegroundColor Yellow
-    Write-Host " 7.  Install Chrome Enterprise" -ForegroundColor White
-    Write-Host " 8.  Install Mozilla Firefox" -ForegroundColor White
+    Write-Host " 10. Install Chrome Enterprise" -ForegroundColor White
+    Write-Host " 11. Install Mozilla Firefox" -ForegroundColor White
     Write-Host ""
     Write-Host "ESSENTIAL APPLICATIONS:" -ForegroundColor Yellow
-    Write-Host " 9.  Install 7-Zip" -ForegroundColor White
-    Write-Host " 10. Install BCUninstaller" -ForegroundColor White
-    Write-Host " 11. Install Bulk Rename Utility" -ForegroundColor White
-    Write-Host " 12. Install CPU-Z" -ForegroundColor White
-    Write-Host " 13. Install File Converter" -ForegroundColor White
-    Write-Host " 14. Install Git" -ForegroundColor White
-    Write-Host " 15. Install Git Extensions" -ForegroundColor White
-    Write-Host " 16. Install Google Chrome" -ForegroundColor White
-    Write-Host " 17. Install Krita" -ForegroundColor White
-    Write-Host " 18. Install Logi Options+" -ForegroundColor White
-    Write-Host " 19. Install Mozilla Firefox" -ForegroundColor White
-    Write-Host " 20. Install Notepad++" -ForegroundColor White
-    Write-Host " 21. Install OpenSCAD" -ForegroundColor White
-    Write-Host " 22. Install VirtualBox" -ForegroundColor White
-    Write-Host " 23. Install PeaZip" -ForegroundColor White
-    Write-Host " 24. Install PrusaSlicer" -ForegroundColor White
-    Write-Host " 25. Install Tabby" -ForegroundColor White
+    Write-Host " 12. Install 7-Zip" -ForegroundColor White
+    Write-Host " 13. Install BCUninstaller" -ForegroundColor White
+    Write-Host " 14. Install Bulk Rename Utility" -ForegroundColor White
+    Write-Host " 15. Install CPU-Z" -ForegroundColor White
+    Write-Host " 16. Install File Converter" -ForegroundColor White
+    Write-Host " 17. Install Git" -ForegroundColor White
+    Write-Host " 18. Install Git Extensions" -ForegroundColor White
+    Write-Host " 19. Install Google Chrome" -ForegroundColor White
+    Write-Host " 20. Install Krita" -ForegroundColor White
+    Write-Host " 21. Install Logi Options+" -ForegroundColor White
+    Write-Host " 22. Install Mozilla Firefox" -ForegroundColor White
+    Write-Host " 23. Install Notepad++" -ForegroundColor White
+    Write-Host " 24. Install OpenSCAD" -ForegroundColor White
+    Write-Host " 25. Install VirtualBox" -ForegroundColor White
+    Write-Host " 26. Install PeaZip" -ForegroundColor White
+    Write-Host " 27. Install PrusaSlicer" -ForegroundColor White
+    Write-Host " 28. Install Tabby" -ForegroundColor White
     Write-Host ""
     Write-Host "DEVELOPER SETUP:" -ForegroundColor Magenta
-    Write-Host " 26. Setup SSH Key + Git Configuration" -ForegroundColor White
-    Write-Host " 27. Setup Git Only (no SSH key)" -ForegroundColor White
-    Write-Host " 28. Set Computer Hostname" -ForegroundColor White
+    Write-Host " 29. Setup SSH Key + Git Configuration" -ForegroundColor White
+    Write-Host " 30. Setup Git Only (no SSH key)" -ForegroundColor White
+    Write-Host " 31. Set Computer Hostname" -ForegroundColor White
     Write-Host ""
     Write-Host "SECURITY & PRIVACY:" -ForegroundColor Red
-    Write-Host " 29. Disable Windows Telemetry" -ForegroundColor White
-    Write-Host " 30. Remove Windows Bloatware" -ForegroundColor White
-    Write-Host " 31. Disable Cortana" -ForegroundColor White
-    Write-Host " 32. Configure Windows Defender Exclusions" -ForegroundColor White
-    Write-Host " 33. Disable Windows Update Auto-Restart" -ForegroundColor White
+    Write-Host " 32. Disable Windows Telemetry" -ForegroundColor White
+    Write-Host " 33. Restore Default Telemetry Settings" -ForegroundColor Yellow
+    Write-Host " 34. Remove Windows Bloatware" -ForegroundColor White
+    Write-Host " 35. Disable Cortana" -ForegroundColor White
+    Write-Host " 36. Enable Cortana" -ForegroundColor Yellow
+    Write-Host " 37. Add Dev Folders to Defender Exclusions" -ForegroundColor White
+    Write-Host " 38. Remove Dev Folders from Defender Exclusions" -ForegroundColor Yellow
+    Write-Host " 39. Disable Windows Update Auto-Restart" -ForegroundColor White
+    Write-Host " 40. Enable Windows Update Auto-Restart" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "PERFORMANCE & SYSTEM:" -ForegroundColor Blue
-    Write-Host " 34. Set High Performance Power Plan" -ForegroundColor White
-    Write-Host " 35. Disable Visual Effects" -ForegroundColor White
-    Write-Host " 36. Configure Virtual Memory" -ForegroundColor White
-    Write-Host " 37. System Cleanup" -ForegroundColor White
-    Write-Host " 38. Disable Startup Programs" -ForegroundColor White
+    Write-Host " 41. Set High Performance Power Plan" -ForegroundColor White
+    Write-Host " 42. Set Balanced Power Plan (Default)" -ForegroundColor Yellow
+    Write-Host " 43. Disable Visual Effects (for Performance)" -ForegroundColor White
+    Write-Host " 44. Enable Visual Effects (for Appearance)" -ForegroundColor Yellow
+    Write-Host " 45. Configure Virtual Memory (Guidance)" -ForegroundColor White
+    Write-Host " 46. System Cleanup" -ForegroundColor White
+    Write-Host " 47. Manage Startup Programs (Guidance)" -ForegroundColor White
     Write-Host ""
     Write-Host "DEVELOPMENT ENVIRONMENT:" -ForegroundColor DarkMagenta
-    Write-Host " 39. Install Windows Terminal" -ForegroundColor White
-    Write-Host " 40. Install Package Managers (Chocolatey/Scoop)" -ForegroundColor White
-    Write-Host " 41. Install Docker Desktop" -ForegroundColor White
-    Write-Host " 42. Setup Dev Folder Structure" -ForegroundColor White
-    Write-Host " 43. Install Node.js" -ForegroundColor White
-    Write-Host " 44. Install Python" -ForegroundColor White
+    Write-Host " 48. Install Windows Terminal" -ForegroundColor White
+    Write-Host " 49. Install Package Managers (Chocolatey/Scoop)" -ForegroundColor White
+    Write-Host " 50. Install Docker Desktop" -ForegroundColor White
+    Write-Host " 51. Setup Dev Folder Structure" -ForegroundColor White
+    Write-Host " 52. Install Node.js" -ForegroundColor White
+    Write-Host " 53. Install Python" -ForegroundColor White
+    Write-Host " 54. Install Rust" -ForegroundColor White
     Write-Host ""
     Write-Host "NETWORK & CONNECTIVITY:" -ForegroundColor DarkCyan
-    Write-Host " 45. Configure DNS Settings" -ForegroundColor White
-    Write-Host " 46. Enable SSH Server" -ForegroundColor White
-    Write-Host " 47. Configure Remote Desktop" -ForegroundColor White
-    Write-Host " 48. Optimize Network Settings" -ForegroundColor White
+    Write-Host " 55. Configure DNS Settings" -ForegroundColor White
+    Write-Host " 56. Enable SSH Server" -ForegroundColor White
+    Write-Host " 57. Configure Remote Desktop" -ForegroundColor White
+    Write-Host " 58. Optimize Network Settings" -ForegroundColor White
     Write-Host ""
     Write-Host "FILE SYSTEM & UI:" -ForegroundColor DarkYellow
-    Write-Host " 49. Show File Extensions" -ForegroundColor White
-    Write-Host " 50. Show Hidden Files" -ForegroundColor White
-    Write-Host " 51. Configure Dark Mode" -ForegroundColor White
-    Write-Host " 52. Set Default Apps" -ForegroundColor White
-    Write-Host " 53. Configure Taskbar Customizations" -ForegroundColor White
+    Write-Host " 59. Show File Extensions" -ForegroundColor White
+    Write-Host " 60. Hide File Extensions (Default)" -ForegroundColor Yellow
+    Write-Host " 61. Show Hidden Files" -ForegroundColor White
+    Write-Host " 62. Hide Hidden Files (Default)" -ForegroundColor Yellow
+    Write-Host " 63. Configure Dark/Light Mode" -ForegroundColor White
+    Write-Host " 64. Set Default Apps (Opens Settings)" -ForegroundColor White
+    Write-Host " 65. Apply Taskbar Customizations" -ForegroundColor White
+    Write-Host " 66. Restore Default Taskbar" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "BACKUP & RECOVERY:" -ForegroundColor DarkGreen
-    Write-Host " 54. Create System Restore Point" -ForegroundColor White
-    Write-Host " 55. Export Installed Programs List" -ForegroundColor White
-    Write-Host " 56. Configure Windows Backup" -ForegroundColor White
+    Write-Host " 67. Create System Restore Point" -ForegroundColor White
+    Write-Host " 68. Export Installed Programs List" -ForegroundColor White
+    Write-Host " 69. Configure Windows Backup (Opens Settings)" -ForegroundColor White
     Write-Host ""
     Write-Host "ENTERPRISE/PROFESSIONAL:" -ForegroundColor Gray
-    Write-Host " 57. Domain Join Assistant" -ForegroundColor White
-    Write-Host " 58. Configure Proxy Settings" -ForegroundColor White
-    Write-Host " 59. Install Certificates" -ForegroundColor White
-    Write-Host " 60. Configure Group Policies" -ForegroundColor White
+    Write-Host " 70. Domain Join Assistant" -ForegroundColor White
+    Write-Host " 71. Configure Proxy Settings" -ForegroundColor White
+    Write-Host " 72. Install Certificates (Guidance)" -ForegroundColor White
+    Write-Host " 73. Configure Group Policies (Opens gpedit.msc)" -ForegroundColor White
     Write-Host ""
     Write-Host "BULK OPERATIONS:" -ForegroundColor Green
-    Write-Host " 61. Update All Installed Apps via Winget" -ForegroundColor White
-    Write-Host " 62. Install All Applications Only" -ForegroundColor White
+    Write-Host " 74. Update All Installed Apps via Winget" -ForegroundColor White
+    Write-Host " 75. Install All Applications Only" -ForegroundColor White
     Write-Host ""
     Write-Host " 999. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
     Write-Host ""
-    Write-Host " 64. Exit" -ForegroundColor Red
+    Write-Host " 100. Exit" -ForegroundColor Red
     Write-Host ""
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "Log file: $script:LogPath" -ForegroundColor Gray
@@ -2299,7 +2597,7 @@ function Start-MainMenu {
     
     do {
         Show-Menu
-        $choice = Read-Host "Enter your choice (1-64, 999)"
+        $choice = Read-Host "Enter your choice (1-75, 999, 100)"
         
         # Handle empty input (just Enter key) - exit script
         if ([string]::IsNullOrWhiteSpace($choice)) {
@@ -2313,88 +2611,101 @@ function Start-MainMenu {
             "2"  { Enable-HyperV; Pause }
             "3"  { Install-WSL2; Pause }
             
-            # WINDOWS CUSTOMIZATIONS (4-6)
+            # WINDOWS CUSTOMIZATIONS (4-9)
             "4"  { Enable-ClassicRightClick; Pause }
-            "5"  { Enable-TaskbarEndTask; Pause }
-            "6"  { Disable-FastBoot; Pause }
+            "5"  { Disable-ClassicRightClick; Pause }
+            "6"  { Enable-TaskbarEndTask; Pause }
+            "7"  { Disable-TaskbarEndTask; Pause }
+            "8"  { Disable-FastBoot; Pause }
+            "9"  { Enable-FastBoot; Pause }
             
-            # BROWSERS (7-8)
-            "7"  { Install-ChromeEnterprise; Pause }
-            "8"  { Install-Firefox; Pause }
+            # BROWSERS (10-11)
+            "10"  { Install-ChromeEnterprise; Pause }
+            "11"  { Install-Firefox; Pause }
             
-            # ESSENTIAL APPLICATIONS (9-25)
-            "9"  { Install-7Zip; Pause }
-            "10" { Install-BCUninstaller; Pause }
-            "11" { Install-BulkRenameUtility; Pause }
-            "12" { Install-CPUZ; Pause }
-            "13" { Install-FileConverter; Pause }
-            "14" { Install-Git; Pause }
-            "15" { Install-GitExtensions; Pause }
-            "16" { Install-GoogleChrome; Pause }
-            "17" { Install-Krita; Pause }
-            "18" { Install-LogiOptionsPlus; Pause }
-            "19" { Install-MozillaFirefox; Pause }
-            "20" { Install-NotepadPlusPlus; Pause }
-            "21" { Install-OpenSCAD; Pause }
-            "22" { Install-VirtualBox; Pause }
-            "23" { Install-PeaZip; Pause }
-            "24" { Install-PrusaSlicer; Pause }
-            "25" { Install-Tabby; Pause }
+            # ESSENTIAL APPLICATIONS (12-28)
+            "12" { Install-7Zip; Pause }
+            "13" { Install-BCUninstaller; Pause }
+            "14" { Install-BulkRenameUtility; Pause }
+            "15" { Install-CPUZ; Pause }
+            "16" { Install-FileConverter; Pause }
+            "17" { Install-Git; Pause }
+            "18" { Install-GitExtensions; Pause }
+            "19" { Install-GoogleChrome; Pause }
+            "20" { Install-Krita; Pause }
+            "21" { Install-LogiOptionsPlus; Pause }
+            "22" { Install-MozillaFirefox; Pause }
+            "23" { Install-NotepadPlusPlus; Pause }
+            "24" { Install-OpenSCAD; Pause }
+            "25" { Install-VirtualBox; Pause }
+            "26" { Install-PeaZip; Pause }
+            "27" { Install-PrusaSlicer; Pause }
+            "28" { Install-Tabby; Pause }
             
-            # DEVELOPER SETUP (26-28)
-            "26" { Setup-SSHKeyAndGit; Pause }
-            "27" { Setup-GitOnly; Pause }
-            "28" { Set-ComputerHostname; Pause }
+            # DEVELOPER SETUP (29-31)
+            "29" { Setup-SSHKeyAndGit; Pause }
+            "30" { Setup-GitOnly; Pause }
+            "31" { Set-ComputerHostname; Pause }
             
-            # SECURITY & PRIVACY (29-33)
-            "29" { Disable-WindowsTelemetry; Pause }
-            "30" { Remove-WindowsBloatware; Pause }
-            "31" { Disable-Cortana; Pause }
-            "32" { Configure-DefenderExclusions; Pause }
-            "33" { Disable-WindowsUpdateAutoRestart; Pause }
+            # SECURITY & PRIVACY (32-40)
+            "32" { Disable-WindowsTelemetry; Pause }
+            "33" { Restore-DefaultTelemetry; Pause }
+            "34" { Remove-WindowsBloatware; Pause }
+            "35" { Disable-Cortana; Pause }
+            "36" { Enable-Cortana; Pause }
+            "37" { Configure-DefenderExclusions; Pause }
+            "38" { Remove-DefenderExclusions; Pause }
+            "39" { Disable-WindowsUpdateAutoRestart; Pause }
+            "40" { Enable-WindowsUpdateAutoRestart; Pause }
             
-            # PERFORMANCE & SYSTEM (34-38)
-            "34" { Set-HighPerformancePower; Pause }
-            "35" { Disable-VisualEffects; Pause }
-            "36" { Configure-VirtualMemory; Pause }
-            "37" { Invoke-SystemCleanup; Pause }
-            "38" { Disable-StartupPrograms; Pause }
+            # PERFORMANCE & SYSTEM (41-47)
+            "41" { Set-HighPerformancePower; Pause }
+            "42" { Set-BalancedPower; Pause }
+            "43" { Disable-VisualEffects; Pause }
+            "44" { Enable-VisualEffects; Pause }
+            "45" { Configure-VirtualMemory; Pause }
+            "46" { Invoke-SystemCleanup; Pause }
+            "47" { Disable-StartupPrograms; Pause }
             
-            # DEVELOPMENT ENVIRONMENT (39-44)
-            "39" { Install-WindowsTerminal; Pause }
-            "40" { Install-PackageManagers; Pause }
-            "41" { Install-DockerDesktop; Pause }
-            "42" { Setup-DevFolderStructure; Pause }
-            "43" { Install-NodeJS; Pause }
-            "44" { Install-Python; Pause }
+            # DEVELOPMENT ENVIRONMENT (48-54)
+            "48" { Install-WindowsTerminal; Pause }
+            "49" { Install-PackageManagers; Pause }
+            "50" { Install-DockerDesktop; Pause }
+            "51" { Setup-DevFolderStructure; Pause }
+            "52" { Install-NodeJS; Pause }
+            "53" { Install-Python; Pause }
+            "54" { Install-Rust; Pause }
             
-            # NETWORK & CONNECTIVITY (45-48)
-            "45" { Configure-DNSSettings; Pause }
-            "46" { Enable-SSHServer; Pause }
-            "47" { Configure-RemoteDesktop; Pause }
-            "48" { Optimize-NetworkSettings; Pause }
+            # NETWORK & CONNECTIVITY (55-58)
+            "55" { Configure-DNSSettings; Pause }
+            "56" { Enable-SSHServer; Pause }
+            "57" { Configure-RemoteDesktop; Pause }
+            "58" { Optimize-NetworkSettings; Pause }
             
-            # FILE SYSTEM & UI (49-53)
-            "49" { Show-FileExtensions; Pause }
-            "50" { Show-HiddenFiles; Pause }
-            "51" { Configure-DarkMode; Pause }
-            "52" { Set-DefaultApps; Pause }
-            "53" { Configure-TaskbarCustomizations; Pause }
+            # FILE SYSTEM & UI (59-66)
+            "59" { Show-FileExtensions; Pause }
+            "60" { Hide-FileExtensions; Pause }
+            "61" { Show-HiddenFiles; Pause }
+            "62" { Hide-HiddenFiles; Pause }
+            "63" { Configure-DarkMode; Pause }
+            "64" { Set-DefaultApps; Pause }
+            "65" { Configure-TaskbarCustomizations; Pause }
+            "66" { Restore-DefaultTaskbar; Pause }
             
-            # BACKUP & RECOVERY (54-56)
-            "54" { Create-SystemRestorePoint; Pause }
-            "55" { Export-InstalledPrograms; Pause }
-            "56" { Configure-WindowsBackup; Pause }
+            # BACKUP & RECOVERY (67-69)
+            "67" { Create-SystemRestorePoint; Pause }
+            "68" { Export-InstalledPrograms; Pause }
+            "69" { Configure-WindowsBackup; Pause }
             
-            # ENTERPRISE/PROFESSIONAL (57-60)
-            "57" { Configure-DomainJoin; Pause }
-            "58" { Configure-ProxySettings; Pause }
-            "59" { Install-Certificates; Pause }
-            "60" { Configure-GroupPolicies; Pause }
+            # ENTERPRISE/PROFESSIONAL (70-73)
+            "70" { Configure-DomainJoin; Pause }
+            "71" { Configure-ProxySettings; Pause }
+            "72" { Install-Certificates; Pause }
+            "73" { Configure-GroupPolicies; Pause }
             
-            # BULK OPERATIONS (61-62)
-            "61" { Update-AllApps; Pause }
-            "62" { 
+            # BULK OPERATIONS (74-75)
+            "74" { Update-AllApps; Pause }
+            "75" { 
                 $confirm = Read-Host "This will install all applications only (no system features). Continue? (Y/N)"
                 if ($confirm -eq "Y" -or $confirm -eq "y") {
                     Install-AllApplications
@@ -2402,8 +2713,8 @@ function Start-MainMenu {
                 Pause
             }
             
-            # EXIT (64)
-            "64" { 
+            # EXIT (100)
+            "100" { 
                 Write-Log "Exiting script..." "INFO"
                 break 
             }
@@ -2425,11 +2736,11 @@ function Start-MainMenu {
             }
             
             default { 
-                Write-Host "Invalid choice. Please select 1-64 or 999. Press Enter to exit." -ForegroundColor Red
+                Write-Host "Invalid choice. Please select a valid option or 100 to exit." -ForegroundColor Red
                 Start-Sleep -Seconds 2
             }
         }
-    } while ($choice -ne "64" -and ![string]::IsNullOrWhiteSpace($choice))
+    } while ($choice -ne "100" -and ![string]::IsNullOrWhiteSpace($choice))
 }
 
 function Pause {
