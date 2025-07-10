@@ -1,7 +1,7 @@
 #=============================================================================
 # Windows Post-Installation Setup Script
 # Author: Claire R
-# Version: 2.4.0
+# Version:  2.5.0
 # Last Updated: June 2025
 # Purpose: Automated Windows system setup after fresh installation
 #
@@ -14,6 +14,7 @@
 # - Or use the bypass method shown above
 #
 # CHANGELOG:
+# v2.5.0 (June 2025) - Added SSH permissions fix feature
 # v2.4.0 (June 2025) - Corrected script structure to resolve ParserError.
 # v2.3.0 (June 2025) - Added driver backup and restore functionality.
 # v2.2.0 (June 2025) - Added undo/revert options for many settings. Added Rust installer.
@@ -99,6 +100,78 @@ function Test-WingetInstalled {
         
         Write-Log "Installing App Installer..."
         Add-AppxPackage -Path $installerPath
+        @@
+ function Setup-GitOnly {
+     Write-Log "`n=== Setting up Git Configuration Only ===" "INFO"
+     Setup-GitConfiguration
+ }
++
++    Write-Log "`n=== Checking and correcting SSH directory permissions ===" "INFO"
++    $sshDir = "$env:USERPROFILE\.ssh"
++    if (!(Test-Path $sshDir)) {
++        Write-Log "No .ssh directory found at $sshDir" "WARNING"
++        return
++    }
++    if ($IsWindows) {
++        icacls $sshDir /inheritance:r /grant:r "$env:USERNAME:(OI)(CI)F" | Out-Null
++    } else {
++        chmod 700 $sshDir
++    }
++    Get-ChildItem -Path $sshDir | ForEach-Object {
++        $file = $_.FullName; $name = $_.Name
++        if ($name -match '^id_.*' -and -not ($name -like '*.pub')) {
++            if ($IsWindows) { icacls $file /inheritance:r /grant:r "$env:USERNAME:F" | Out-Null } else { chmod 600 $file }
++            Write-Log "Set 600 for $name" "INFO"
++        } elseif ($name -like '*.pub') {
++            if ($IsWindows) { icacls $file /inheritance:r /grant:r "$env:USERNAME:R" | Out-Null } else { chmod 644 $file }
++            Write-Log "Set 644 for $name" "INFO"
++        } elseif ($name -in 'authorized_keys','known_hosts') {
++            if ($IsWindows) { icacls $file /inheritance:r /grant:r "$env:USERNAME:F" | Out-Null } else { chmod 600 $file }
++            Write-Log "Set 600 for $name" "INFO"
++        } else {
++            if ($IsWindows) { icacls $file /inheritance:r /grant:r "$env:USERNAME:F" | Out-Null } else { chmod 600 $file }
++            Write-Log "Set 600 for $name" "INFO"
++        }
++    }
++    Write-Log "SSH permissions corrected." "SUCCESS"
++}
+@@ 
+function Do-MyNewFeature {
+    [CmdletBinding()]
+    param()
+    Write-Log "Starting SSH permissions fix" "INFO"
+    try {
+        $sshDir = Join-Path $Env:USERPROFILE '.ssh'
+        if (-Not (Test-Path $sshDir)) {
+            Write-Log "SSH directory not found at $sshDir" "WARNING"
+            Write-Host "No SSH directory found for current user. Skipping." -ForegroundColor Yellow
+            return
+        }
+        Write-Log "Setting ACLs on SSH directory: $sshDir" "INFO"
+        icacls $sshDir /inheritance:r /grant:r "$Env:USERNAME:(OI)(CI)F" /grant:r "SYSTEM:F" | Out-Null
+        Write-Log "Setting ACLs on files within SSH directory" "INFO"
+        icacls (Join-Path $sshDir '*') /inheritance:r /grant:r "$Env:USERNAME:F" /grant:r "SYSTEM:F" | Out-Null
+        Write-Log "SSH permissions fixed successfully" "SUCCESS"
+        Write-Host "SSH directory permissions updated." -ForegroundColor Green
+    } catch {
+        Write-Log "Error fixing SSH permissions: $_" "ERROR"
+        Write-Host "Failed to fix SSH permissions: $_" -ForegroundColor Red
+    }
+}
+function Show-Menu {
+-       Write-Host " 101. Fix SSH Directory Permissions" -ForegroundColor White
+    Write-Host " 100. Exit" -ForegroundColor Red
++       Write-Host " 101. Fix SSH Directory Permissions" -ForegroundColor White
+    Write-Host " 100. Exit" -ForegroundColor Red
++   Write-Host " 101. Check and correct SSH directory permissions" -ForegroundColor White
+@@ function Start-MainMenu {
+             "999" { 
+@@
+-            # EXIT (100)
++            # EXIT (100)
+             "100" {
+                 Write-Log "Exiting script..." "INFO"
+@@
         
         # Verify installation
         if (Test-CommandExists "winget") {
@@ -2544,11 +2617,34 @@ function Install-Everything {
 # MENU SYSTEM
 #=============================================================================
 
+
+function Do-MyNewFeature {
+    [CmdletBinding()]
+    param()
+    Write-Log "Starting SSH permissions fix" "INFO"
+    try {
+        $sshDir = Join-Path $Env:USERPROFILE '.ssh'
+        if (-Not (Test-Path $sshDir)) {
+            Write-Log "SSH directory not found at $sshDir" "WARNING"
+            Write-Host "No SSH directory found for current user. Skipping." -ForegroundColor Yellow
+            return
+        }
+        Write-Log "Setting ACLs on SSH directory: $sshDir" "INFO"
+        icacls $sshDir /inheritance:r /grant:r "$Env:USERNAME:(OI)(CI)F" /grant:r "SYSTEM:F" | Out-Null
+        Write-Log "Setting ACLs on files within SSH directory" "INFO"
+        icacls (Join-Path $sshDir '*') /inheritance:r /grant:r "$Env:USERNAME:F" /grant:r "SYSTEM:F" | Out-Null
+        Write-Log "SSH permissions fixed successfully" "SUCCESS"
+        Write-Host "SSH directory permissions updated." -ForegroundColor Green
+    } catch {
+        Write-Log "Error fixing SSH permissions: $_" "ERROR"
+        Write-Host "Failed to fix SSH permissions: $_" -ForegroundColor Red
+    }
+}
 function Show-Menu {
     Clear-Host
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host "    Windows Post-Installation Setup Script    " -ForegroundColor White
-    Write-Host "           Author: Claire R (v2.4.0)          " -ForegroundColor Gray
+    Write-Host "           Author: Claire R (v2.5.0)          " -ForegroundColor Gray
     Write-Host "=============================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "SYSTEM FEATURES:" -ForegroundColor Yellow
@@ -2656,6 +2752,7 @@ function Show-Menu {
     Write-Host ""
     Write-Host " 999. INSTALL EVERYTHING (One-Click Setup)" -ForegroundColor Magenta
     Write-Host ""
+        Write-Host " 101. Fix SSH Directory Permissions" -ForegroundColor White
     Write-Host " 100. Exit" -ForegroundColor Red
     Write-Host ""
     Write-Host "=============================================" -ForegroundColor Cyan
