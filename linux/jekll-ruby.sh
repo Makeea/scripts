@@ -5,10 +5,10 @@
 # and sets up Ruby using rbenv. It then installs the latest stable version of Ruby and Jekyll.
 
 # Update and upgrade system packages
-sudo apt-get update -y && sudo apt-get upgrade -y
+sudo apt update -y && sudo apt upgrade -y
 
 # Install dependencies for building Ruby and other essential tools
-sudo apt-get install -y git-core zlib1g-dev build-essential libssl-dev libreadline-dev \
+sudo apt install -y git-core zlib1g-dev build-essential libssl-dev libreadline-dev \
 libyaml-dev libsqlite3-dev sqlite3 libxml2-dev libxslt1-dev libcurl4-openssl-dev \
 software-properties-common libffi-dev nodejs yarn
 
@@ -41,7 +41,7 @@ gem install jekyll bundler
 curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash - # Using LTS version of Node.js
 curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
 echo "deb https://dl.yarnpkg.com/debian/ stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-sudo apt-get update -y
-sudo apt-get install -y nodejs yarn
+sudo apt update -y
+sudo apt install -y nodejs yarn
 
 echo "Ruby and Jekyll installation completed."

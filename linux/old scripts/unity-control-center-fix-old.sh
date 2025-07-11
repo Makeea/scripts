@@ -3,7 +3,7 @@
 # Uninstall and then reinstall System Settings (unity-control-center) from the Ubuntu Software Center application.
 
 # uninstall control center aka settings on ubuntu desktop
-sudo apt-get remove unity-control-center -y
+sudo apt remove unity-control-center -y
 
 # update Ubuntu
 sudo apt update -y # update the package versions
@@ -19,6 +19,6 @@ sudo apt upgrade
 
 # reinstall unity-control-center
 
-sudo apt-get install unity-control-center -y
+sudo apt install unity-control-center -y
 
 sudo reboot

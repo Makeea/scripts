@@ -23,9 +23,9 @@ sudo apt upgrade -y
 sudo apt update -y
 
 echo speedtest
-sudo apt-get install curl
+sudo apt install curl
 curl -s https://install.speedtest.net/app/cli/install.deb.sh | sudo bash
-sudo apt-get install speedtest -y
+sudo apt install speedtest -y
 
 echo gping https://github.com/orf/gping
 

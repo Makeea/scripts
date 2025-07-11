@@ -3,8 +3,8 @@
 # Function for automatic installation
 automatic_install() {
     echo "Performing automatic installation..."
-    sudo apt-get update
-    sudo apt-get install -y qemu-guest-agent
+    sudo apt update
+    sudo apt install -y qemu-guest-agent
     sudo systemctl enable qemu-guest-agent
     echo "qemu-guest-agent service enabled to autostart."
     echo "Rebooting the system..."
@@ -14,10 +14,10 @@ automatic_install() {
 # Function for manual installation
 manual_install() {
     echo "Updating package list..."
-    sudo apt-get update
+    sudo apt update
 
     echo "Installing qemu-guest-agent..."
-    sudo apt-get install -y qemu-guest-agent
+    sudo apt install -y qemu-guest-agent
 
     read -p "Are you sure you want to set qemu-guest-agent to autostart? (y/n): " confirm
     if [[ $confirm == [Yy]* ]]; then

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 
-sudo apt-get update -y
+sudo apt update -y
 
 #  Gigolo — a simple frontend to easily connect to remote filesystems with GIO/GVfs
-sudo apt-get install -y gigolo
+sudo apt install -y gigolo

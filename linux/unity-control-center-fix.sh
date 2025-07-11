@@ -12,7 +12,7 @@ echo "It will update your system, uninstall unity-control-center, reinstall it, 
 
 # Step 1: Uninstall unity-control-center
 echo "Step 1: Uninstalling unity-control-center..."
-sudo apt-get remove unity-control-center -y
+sudo apt remove unity-control-center -y
 
 # Step 2: Update the system
 echo "Step 2: Updating the system..."
@@ -21,7 +21,7 @@ sudo apt upgrade -y        # Upgrade installed packages to the latest versions
 
 # Step 3: Reinstall unity-control-center
 echo "Step 3: Reinstalling unity-control-center..."
-sudo apt-get install unity-control-center -y
+sudo apt install unity-control-center -y
 
 # Ask the user if they want to reboot
 echo -n "Do you want to reboot now? (yes/no): "

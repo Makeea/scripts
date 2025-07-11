@@ -10,8 +10,8 @@ wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 sudo dpkg -i google-chrome-stable_current_amd64.deb
 
 # Handling possible missing dependencies
-# Sometimes dpkg might not handle dependencies automatically, so we use apt-get to fix any missing dependencies
-sudo apt-get install -f
+# Sometimes dpkg might not handle dependencies automatically, so we use apt to fix any missing dependencies
+sudo apt install -f
 
 # Removing the downloaded .deb package to free up space
 # This step cleans up the installation file as it's no longer needed after installation

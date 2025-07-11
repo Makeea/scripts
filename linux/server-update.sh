@@ -30,19 +30,19 @@ echo "Starting unattended system maintenance..."
 
 # First update and upgrade pass
 echo "Step 1: Updating package lists..."
-sudo apt-get update -y
+sudo apt update -y
 
 echo "Step 2: Upgrading installed packages..."
-sudo apt-get upgrade -y
+sudo apt upgrade -y
 
 echo "Step 3: Removing unnecessary packages..."
-sudo apt-get autoremove -y
+sudo apt autoremove -y
 
 # Double-check for remaining updates
 echo "Step 4: Rechecking for pending upgrades..."
-sudo apt-get update -y
-sudo apt-get upgrade -y
-sudo apt-get autoremove -y
+sudo apt update -y
+sudo apt upgrade -y
+sudo apt autoremove -y
 
 # Final visibility for admin (non-interactive)
 echo "Step 5: Final check for any remaining upgrades..."

@@ -2,11 +2,11 @@
 
 # Update the package list
 echo "Updating package list..."
-sudo apt-get update
+sudo apt update
 
 # Install qemu-guest-agent
 echo "Installing qemu-guest-agent..."
-sudo apt-get install -y qemu-guest-agent
+sudo apt install -y qemu-guest-agent
 
 # Ask user to enable qemu-guest-agent service to autostart
 read -p "Are you sure you want to set qemu-guest-agent to autostart? (y/n): " confirm

@@ -99,17 +99,17 @@ ask_for_os_upgrade
 # Update the system's package list
 echo ""
 echo "Updating package lists..."
-sudo apt-get update -y
+sudo apt update -y
 
 # Upgrade installed packages to the latest versions
 echo ""
 echo "Upgrading installed packages..."
-sudo apt-get upgrade -y
+sudo apt upgrade -y
 
 # Remove packages that are no longer required
 echo ""
 echo "Removing unnecessary packages..."
-sudo apt-get autoremove -y
+sudo apt autoremove -y
 
 # Show any remaining upgradable packages
 echo ""
