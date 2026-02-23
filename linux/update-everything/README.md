@@ -37,6 +37,30 @@ Proxmox rolling update (clustered nodes):
 sudo ./pve-rolling-update.sh
 ```
 
+## Quick Run (curl)
+
+Preferred (download, then run):
+
+```bash
+curl -fsSL -o /tmp/update-everything.sh https://raw.githubusercontent.com/Makeea/scripts/master/linux/update-everything/update-everything.sh
+chmod +x /tmp/update-everything.sh
+sudo /tmp/update-everything.sh
+```
+
+SRE version:
+
+```bash
+curl -fsSL -o /tmp/update-everything-sre.sh https://raw.githubusercontent.com/Makeea/scripts/master/linux/update-everything/update-everything-sre.sh
+chmod +x /tmp/update-everything-sre.sh
+sudo /tmp/update-everything-sre.sh --dry-run
+```
+
+Curl + bash (less safe):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/update-everything/update-everything.sh | bash
+```
+
 ## Notes
 
 - Proxmox rolling updates check quorum, drain VMs/CTs, and use HA maintenance mode when available.
