@@ -3,6 +3,7 @@
 set -euo pipefail
 
 SCRIPT_NAME="linux-update-universal.sh"
+SCRIPT_URL="https://raw.githubusercontent.com/Makeea/scripts/master/linux/linux-update-universal.sh"
 LOG_FILE="/var/log/linux-update-universal.log"
 LOCK_FILE="/var/run/linux-update-universal.lock"
 DISTRO_FAMILY=""
@@ -34,7 +35,15 @@ trap 'fail "Script failed on line $LINENO."' ERR
 
 require_root() {
     if [[ "${EUID}" -ne 0 ]]; then
-        fail "Run this script as root. Example: curl -fsSL <url> | sudo bash"
+        if command -v sudo >/dev/null 2>&1; then
+            printf 'Root privileges required. Re-running with sudo.\n' >&2
+            exec sudo bash -c "curl -fsSL '$SCRIPT_URL' | bash"
+        fi
+
+        printf 'Root privileges required. Run as root or use a root-aware launcher.\n' >&2
+        printf 'Example as root: curl -fsSL %s | bash\n' "$SCRIPT_URL" >&2
+        printf 'Example with sudo: curl -fsSL %s | sudo bash\n' "$SCRIPT_URL" >&2
+        exit 1
     fi
 }
 

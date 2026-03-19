@@ -46,7 +46,7 @@ https://raw.githubusercontent.com/Makeea/scripts/master/linux/linux-update-unive
 ▶️ **Run it:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/linux-update-universal.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/linux-update-universal.sh | bash
 ```
 
 **What it does:**
@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/linux-u
 
 **Good to know:**
 
-- Run it with `sudo` or as root
+- Run it with `bash`; the script will use `sudo` itself when needed and available
 - It does not perform major OS version upgrades
 - On Proxmox, it does not reboot automatically and will tell you if a reboot is recommended
 - Best for routine package updates on Debian, Ubuntu, Fedora, Rocky, AlmaLinux, Arch, Manjaro, openSUSE, and similar systems

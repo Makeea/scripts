@@ -17,7 +17,7 @@ chmod +x scriptname.sh
 ### Method 2 – Run directly from GitHub:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/scriptname.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/scriptname.sh | bash
 ```
 
 ---
