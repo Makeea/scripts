@@ -39,6 +39,7 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/scriptn
 - `jekll.sh` – Installs the latest Jekyll site generator.
 - `nodejs.sh` – Installs Node.js from the official source.
 - `pia_connect.sh` – Connects to Private Internet Access (PIA) VPN using OpenVPN.
+- `pihole-update.sh` – Updates apt packages on a Pi-hole host, runs `pihole -up`, logs the run, and reports if a reboot is recommended.
 - `portainer-updater.sh` – Updates an existing Portainer Docker container.
 - `portainer.sh` – Installs and runs Portainer as a Docker container.
 - `proxmox-create-ubuntu-cloudinit-template.sh` – Prepares a cloud-init image for Proxmox virtual machines.

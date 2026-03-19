@@ -68,6 +68,35 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/linux-u
 
 ---
 
+### 🟦 Update a Pi-hole Server
+
+This updater refreshes Debian or Ubuntu packages on a Pi-hole host and then runs the Pi-hole updater.
+
+📄 **Script link:**  
+https://raw.githubusercontent.com/Makeea/scripts/master/linux/pihole-update.sh
+
+▶️ **Run it:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/pihole-update.sh | bash
+```
+
+**What it does:**
+
+- Uses `apt` to update and upgrade system packages
+- Runs `pihole -up` to update Pi-hole itself
+- Writes logs to `/var/log/pihole-update.log`
+- Prevents overlapping runs with a lock file
+- Tells you if a reboot is recommended
+
+**Good to know:**
+
+- Run it with `bash`; the script will use `sudo` itself when needed and available
+- It is intended for Debian, Ubuntu, Raspberry Pi OS, and similar Pi-hole hosts
+- It does not reboot automatically
+
+---
+
 ### 🔐 Import GitHub SSH Key to Your Server
 
 This command lets you import your GitHub SSH key directly to a server so you can log in without typing your password.
@@ -102,6 +131,7 @@ ssh-import-id-gh <username>
 | `linux/proxmox-create-ubuntu-cloudinit-template.sh` | Create a cloud-init template for Proxmox |
 | `linux/git-Ed25519-setup.sh` | Secure SSH key generator for GitHub access |
 | `linux/linux-update-universal.sh` | Cross-distro Linux updater with logging, cleanup, and Proxmox-safe reboot handling |
+| `linux/pihole-update.sh` | Update system packages on a Pi-hole host and run the Pi-hole updater |
 | `batch/Clear Print Queue.bat` | Clears printer queue on Windows systems |
 | `linux/rsync_backup.sh` | Automates backup using rsync |
 
