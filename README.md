@@ -52,16 +52,18 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/linux-u
 **What it does:**
 
 - Detects the distro from `/etc/os-release`
+- Detects Proxmox VE hosts and handles them safely
 - Supports `apt`, `dnf`, `yum`, `pacman`, and `zypper`
 - Runs updates and cleanup commands for the detected package manager
 - Writes logs to `/var/log/linux-update-universal.log`
 - Prevents overlapping runs with a lock file
-- Reboots automatically after a successful update
+- Reboots automatically after a successful update on non-Proxmox systems
 
 **Good to know:**
 
 - Run it with `sudo` or as root
 - It does not perform major OS version upgrades
+- On Proxmox, it does not reboot automatically and will tell you if a reboot is recommended
 - Best for routine package updates on Debian, Ubuntu, Fedora, Rocky, AlmaLinux, Arch, Manjaro, openSUSE, and similar systems
 
 ---
@@ -99,7 +101,7 @@ ssh-import-id-gh <username>
 | `linux/docker.sh` | Install Docker and Docker Compose on Ubuntu |
 | `linux/proxmox-create-ubuntu-cloudinit-template.sh` | Create a cloud-init template for Proxmox |
 | `linux/git-Ed25519-setup.sh` | Secure SSH key generator for GitHub access |
-| `linux/linux-update-universal.sh` | Cross-distro Linux updater with logging, cleanup, and automatic reboot |
+| `linux/linux-update-universal.sh` | Cross-distro Linux updater with logging, cleanup, and Proxmox-safe reboot handling |
 | `batch/Clear Print Queue.bat` | Clears printer queue on Windows systems |
 | `linux/rsync_backup.sh` | Automates backup using rsync |
 

@@ -55,7 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/scriptn
 - `server-post-install.sh` – Basic post-install setup for newly built servers.
 - `server-staging.sh` – Prepares a Linux server for use as a staging environment.
 - `server-update.sh` – Runs system updates and cleanup tasks.
-- `linux-update-universal.sh` – Detects the Linux distro, installs package updates with the native package manager, performs cleanup, and reboots automatically after a successful run.
+- `linux-update-universal.sh` – Detects the Linux distro, installs package updates with the native package manager, performs cleanup, auto-reboots on non-Proxmox systems, and reports when Proxmox should be rebooted.
 - `setup_vnc.sh` – Installs and configures a VNC remote desktop server.
 - `setup_xrdp.sh` – Installs xRDP and configures desktop access via RDP.
 - `system_update.sh` – Performs `apt update` and `apt upgrade` with no prompts.

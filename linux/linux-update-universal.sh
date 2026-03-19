@@ -9,6 +9,8 @@ DISTRO_FAMILY=""
 DISTRO_ID=""
 DISTRO_NAME=""
 PKG_MGR=""
+IS_PROXMOX=false
+REBOOT_REQUIRED=false
 
 log() {
     local message="$1"
@@ -54,6 +56,11 @@ detect_os() {
     DISTRO_ID="${ID:-unknown}"
     DISTRO_NAME="${PRETTY_NAME:-${NAME:-unknown}}"
 
+    if command -v pveversion >/dev/null 2>&1; then
+        IS_PROXMOX=true
+        DISTRO_NAME="Proxmox VE (${DISTRO_NAME})"
+    fi
+
     case "$DISTRO_ID" in
         ubuntu|debian|linuxmint|pop|kali|raspbian)
             DISTRO_FAMILY="apt"
@@ -96,6 +103,25 @@ detect_os() {
                 PKG_MGR="zypper"
             else
                 fail "Unsupported Linux distribution: $DISTRO_NAME"
+            fi
+            ;;
+    esac
+}
+
+detect_reboot_requirement() {
+    REBOOT_REQUIRED=false
+
+    if [[ -f /var/run/reboot-required ]]; then
+        REBOOT_REQUIRED=true
+        return
+    fi
+
+    case "$DISTRO_FAMILY" in
+        dnf|yum)
+            if command -v needs-restarting >/dev/null 2>&1; then
+                if needs-restarting -r >/dev/null 2>&1; then
+                    REBOOT_REQUIRED=true
+                fi
             fi
             ;;
     esac
@@ -182,6 +208,15 @@ show_summary() {
 }
 
 reboot_system() {
+    if [[ "$IS_PROXMOX" == true ]]; then
+        if [[ "$REBOOT_REQUIRED" == true ]]; then
+            log "Update completed successfully. Reboot is recommended, but automatic reboot is disabled on Proxmox."
+        else
+            log "Update completed successfully. No reboot is currently required on Proxmox."
+        fi
+        return
+    fi
+
     log "Update completed successfully. Rebooting now."
     reboot
 }
@@ -219,6 +254,7 @@ main() {
     esac
 
     show_summary
+    detect_reboot_requirement
     reboot_system
 }
 
