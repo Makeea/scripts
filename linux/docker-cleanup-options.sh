@@ -33,6 +33,11 @@ show_disk_usage() {
     docker_cmd system df || true
 }
 
+show_free_space() {
+    # Print host filesystem free space so the user can see real disk impact.
+    df -h /
+}
+
 pause() {
     # Pause so the menu does not immediately redraw after an action.
     read -r -p "Press Enter to continue..."
@@ -106,21 +111,36 @@ cleanup_aggressive() {
 }
 
 print_menu() {
-    cat <<'EOF'
+    cat <<'MENU'
 
 Docker Cleanup Menu
 1. Show Docker disk usage
-2. Remove stopped containers
-3. Remove dangling images
-4. Remove all unused images
-5. Remove unused networks
-6. Remove build cache
-7. Remove unused volumes
-8. Run standard cleanup
-9. Run aggressive cleanup
+2. Show host free space
+3. Remove stopped containers
+4. Remove dangling images
+5. Remove all unused images
+6. Remove unused networks
+7. Remove build cache
+8. Remove unused volumes
+9. Run standard cleanup
+10. Run aggressive cleanup
 0. Exit
 
-EOF
+MENU
+}
+
+run_with_free_space() {
+    # Show host free space before and after a cleanup action.
+    local action_name="$1"
+    shift
+
+    echo
+    echo "Host free space before $action_name:"
+    show_free_space
+    "$@"
+    echo
+    echo "Host free space after $action_name:"
+    show_free_space
 }
 
 handle_choice() {
@@ -132,43 +152,47 @@ handle_choice() {
             show_disk_usage
             ;;
         2)
-            if confirm "Remove stopped containers?"; then
-                cleanup_stopped_containers
-            fi
+            echo
+            show_free_space
             ;;
         3)
-            if confirm "Remove dangling images?"; then
-                cleanup_dangling_images
+            if confirm "Remove stopped containers?"; then
+                run_with_free_space "cleanup" cleanup_stopped_containers
             fi
             ;;
         4)
-            if confirm "Remove all unused images?"; then
-                cleanup_unused_images
+            if confirm "Remove dangling images?"; then
+                run_with_free_space "cleanup" cleanup_dangling_images
             fi
             ;;
         5)
-            if confirm "Remove unused networks?"; then
-                cleanup_unused_networks
+            if confirm "Remove all unused images?"; then
+                run_with_free_space "cleanup" cleanup_unused_images
             fi
             ;;
         6)
-            if confirm "Remove build cache?"; then
-                cleanup_build_cache
+            if confirm "Remove unused networks?"; then
+                run_with_free_space "cleanup" cleanup_unused_networks
             fi
             ;;
         7)
-            if confirm "Remove unused volumes?"; then
-                cleanup_unused_volumes
+            if confirm "Remove build cache?"; then
+                run_with_free_space "cleanup" cleanup_build_cache
             fi
             ;;
         8)
-            if confirm "Run standard Docker cleanup?"; then
-                cleanup_standard
+            if confirm "Remove unused volumes?"; then
+                run_with_free_space "cleanup" cleanup_unused_volumes
             fi
             ;;
         9)
+            if confirm "Run standard Docker cleanup?"; then
+                run_with_free_space "standard cleanup" cleanup_standard
+            fi
+            ;;
+        10)
             if confirm "Run aggressive Docker cleanup?"; then
-                cleanup_aggressive
+                run_with_free_space "aggressive cleanup" cleanup_aggressive
             fi
             ;;
         0)

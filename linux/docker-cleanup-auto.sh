@@ -38,9 +38,17 @@ show_disk_usage() {
     docker_cmd system df || true
 }
 
+show_free_space() {
+    # Print host filesystem free space before and after cleanup.
+    df -h /
+}
+
 main() {
     require_command
 
+    echo "[$SCRIPT_NAME] Host free space before cleanup:"
+    show_free_space
+    echo
     echo "[$SCRIPT_NAME] Docker disk usage before cleanup:"
     show_disk_usage
     echo
@@ -52,6 +60,9 @@ main() {
     echo
     echo "[$SCRIPT_NAME] Docker disk usage after cleanup:"
     show_disk_usage
+    echo
+    echo "[$SCRIPT_NAME] Host free space after cleanup:"
+    show_free_space
     echo
     echo "[$SCRIPT_NAME] Cleanup complete."
 }
