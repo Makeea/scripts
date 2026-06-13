@@ -1,7 +1,7 @@
 #=============================================================================
 # Unsplash Wallpaper Downloader
 # Author: Claire R
-# Version: 1.2.0
+# Version: 1.3.0
 # Last Updated: June 2026
 # Purpose: Downloads up to 10 wallpapers per day from Unsplash for one
 #          user-defined category at a time (rotates through up to 4),
@@ -24,6 +24,7 @@
 # .\Get-UnsplashWallpapers.ps1 -SetupApiKey         Store or update API key
 # .\Get-UnsplashWallpapers.ps1 -SetupCategories     Define up to 4 search categories
 # .\Get-UnsplashWallpapers.ps1 -SetupScheduledTask  Register daily Task Scheduler job
+# .\Get-UnsplashWallpapers.ps1 -Reset               Clear download counter + restart rotation
 #=============================================================================
 
 param(
@@ -43,53 +44,75 @@ $MaxCategories     = 4
 
 $script:DownloadedToday = 0
 
-#=============================================================================
-# PER-MONITOR WALLPAPER (IDesktopWallpaper COM interface)
-#=============================================================================
-
-if (-not ([System.Management.Automation.PSTypeName]'UnsplashWp.IDesktopWallpaper').Type) {
-    Add-Type -TypeDefinition @"
+# C# type definition for IDesktopWallpaper — compiled inside the STA runspace
+# in Set-PerMonitorWallpaper so it's available in the correct COM apartment.
+$script:WallpaperTypeDef = @'
 using System.Runtime.InteropServices;
-
 namespace UnsplashWp {
     [ComImport, Guid("B92B56A9-8B55-4E14-9A89-0199BBB6F93B"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     public interface IDesktopWallpaper {
-        void SetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorID, [MarshalAs(UnmanagedType.LPWStr)] string wallpaper);
-        [return: MarshalAs(UnmanagedType.LPWStr)] string GetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorID);
-        [return: MarshalAs(UnmanagedType.LPWStr)] string GetMonitorDevicePathAt([MarshalAs(UnmanagedType.U4)] uint monitorIndex);
+        void SetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string m, [MarshalAs(UnmanagedType.LPWStr)] string w);
+        [return: MarshalAs(UnmanagedType.LPWStr)] string GetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string m);
+        [return: MarshalAs(UnmanagedType.LPWStr)] string GetMonitorDevicePathAt([MarshalAs(UnmanagedType.U4)] uint i);
         [return: MarshalAs(UnmanagedType.U4)] uint GetMonitorDevicePathCount();
-        void GetMonitorRECT([MarshalAs(UnmanagedType.LPWStr)] string monitorID, out RECT rc);
-        void SetBackgroundColor([MarshalAs(UnmanagedType.U4)] uint color);
+        void GetMonitorRECT([MarshalAs(UnmanagedType.LPWStr)] string m, out RECT r);
+        void SetBackgroundColor([MarshalAs(UnmanagedType.U4)] uint c);
         [return: MarshalAs(UnmanagedType.U4)] uint GetBackgroundColor();
-        void SetPosition([MarshalAs(UnmanagedType.I4)] int position);
+        void SetPosition([MarshalAs(UnmanagedType.I4)] int p);
         [return: MarshalAs(UnmanagedType.I4)] int GetPosition();
         void SetSlideshow(System.IntPtr items);
         System.IntPtr GetSlideshow();
-        void SetSlideshowOptions([MarshalAs(UnmanagedType.U4)] uint options, [MarshalAs(UnmanagedType.U4)] uint slideshowTick);
-        void GetSlideshowOptions(out uint options, out uint slideshowTick);
-        void AdvanceSlideshow([MarshalAs(UnmanagedType.LPWStr)] string monitorID, [MarshalAs(UnmanagedType.I4)] int direction);
+        void SetSlideshowOptions([MarshalAs(UnmanagedType.U4)] uint o, [MarshalAs(UnmanagedType.U4)] uint t);
+        void GetSlideshowOptions(out uint o, out uint t);
+        void AdvanceSlideshow([MarshalAs(UnmanagedType.LPWStr)] string m, [MarshalAs(UnmanagedType.I4)] int d);
         [return: MarshalAs(UnmanagedType.U4)] uint GetStatus();
-        [return: MarshalAs(UnmanagedType.Bool)] bool Enable([MarshalAs(UnmanagedType.Bool)] bool enable);
+        [return: MarshalAs(UnmanagedType.Bool)] bool Enable([MarshalAs(UnmanagedType.Bool)] bool e);
     }
-
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
 }
-"@
-}
+'@
+
+#=============================================================================
+# PER-MONITOR WALLPAPER
+#=============================================================================
 
 function Set-PerMonitorWallpaper {
     param([string[]]$ImagePaths)
-    $clsid        = [Guid]"C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD"
-    $dw           = [Activator]::CreateInstance([Type]::GetTypeFromCLSID($clsid)) -as [UnsplashWp.IDesktopWallpaper]
-    $monitorCount = [int]$dw.GetMonitorDevicePathCount()
-    $dw.SetPosition(4)  # Fill
-    for ($i = 0; $i -lt $monitorCount; $i++) {
-        $monitorId = $dw.GetMonitorDevicePathAt([uint32]$i)
-        $img       = $ImagePaths[$i % $ImagePaths.Count]
-        $dw.SetWallpaper($monitorId, $img)
-        Write-Host "  Monitor $($i + 1): $(Split-Path $img -Leaf)" -ForegroundColor Green
-    }
+
+    # pwsh runs MTA by default; IDesktopWallpaper requires STA.
+    # Spin up a dedicated STA runspace for the COM call.
+    $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+    $iss.ApartmentState = [System.Threading.ApartmentState]::STA
+    $rs  = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($iss)
+    $rs.Open()
+
+    $ps = [System.Management.Automation.PowerShell]::Create()
+    $ps.Runspace = $rs
+
+    [void]$ps.AddScript({
+        param([string[]]$images, [string]$td)
+        Add-Type -TypeDefinition $td -ErrorAction SilentlyContinue
+        $dw = [Activator]::CreateInstance(
+            [Type]::GetTypeFromCLSID([Guid]'C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD')
+        ) -as [UnsplashWp.IDesktopWallpaper]
+        if ($null -eq $dw) { throw 'Could not obtain IDesktopWallpaper interface.' }
+        $count = [int]$dw.GetMonitorDevicePathCount()
+        $dw.SetPosition(4)  # Fill
+        for ($i = 0; $i -lt $count; $i++) {
+            $id  = $dw.GetMonitorDevicePathAt([uint32]$i)
+            $img = $images[$i % $images.Count]
+            $dw.SetWallpaper($id, $img)
+            "Monitor $($i + 1): $(Split-Path $img -Leaf)"
+        }
+    }).AddArgument($ImagePaths).AddArgument($script:WallpaperTypeDef)
+
+    $out = $ps.Invoke()
+    $ps.Streams.Error | ForEach-Object { Write-Host "  Error: $_" -ForegroundColor Red }
+    $out | ForEach-Object { Write-Host "  $_" -ForegroundColor Green }
+
+    $ps.Dispose()
+    $rs.Close()
 }
 
 #=============================================================================
@@ -285,11 +308,12 @@ function Get-UnsplashImages {
         $filePath = Join-Path $WallpaperDir "$Prefix-$($photo.id).jpg"
         if (Test-Path $filePath) { continue }
 
-        $imageUrl = "{0}&w={1}&h={2}&fit=crop&q=85" -f $photo.urls.raw, $Width, $Height
-
         try {
+            # download_location returns the authorized image URL and registers the
+            # download event with Unsplash in one call (required by API guidelines)
+            $dlInfo   = Invoke-RestMethod -Uri $photo.links.download_location -Headers $headers -Method Get
+            $imageUrl = "$($dlInfo.url)&w=$Width&h=$Height&fit=crop&q=85"
             Invoke-WebRequest -Uri $imageUrl -OutFile $filePath -UseBasicParsing
-            Invoke-RestMethod -Uri $photo.links.download_location -Headers $headers -Method Get | Out-Null
             $script:DownloadedToday++
             Write-Host "  Downloaded: $Prefix-$($photo.id).jpg  [$script:DownloadedToday/$MaxDailyDownloads]" -ForegroundColor Gray
             $collected.Add($filePath)
@@ -306,8 +330,8 @@ function Get-UnsplashImages {
 # MAIN
 #=============================================================================
 
-if ($SetupApiKey)         { Invoke-SetupApiKey;       exit 0 }
-if ($SetupCategories)     { Invoke-SetupCategories;   exit 0 }
+if ($SetupApiKey)     { Invoke-SetupApiKey;     exit 0 }
+if ($SetupCategories) { Invoke-SetupCategories; exit 0 }
 if ($Reset) {
     Update-Config @{ NextCategoryIndex = 0; DownloadLog = [ordered]@{ Date = ""; Count = 0 } }
     Write-Host "Reset: category rotation back to 1, download counter cleared." -ForegroundColor Green
@@ -365,13 +389,11 @@ Get-UnsplashImages `
     -Height  $resolution.Height `
     -Count   $remainingToday | Out-Null
 
-# Persist updated index and download count
 Update-Config @{
     NextCategoryIndex = $nextIdx
     DownloadLog       = [ordered]@{ Date = $today; Count = $script:DownloadedToday }
 }
 
-# Rotate wallpapers from the full library (all categories downloaded so far)
 $allWallpapers = @(Get-ChildItem $WallpaperDir -Filter "*.jpg" -Recurse -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty FullName)
 
