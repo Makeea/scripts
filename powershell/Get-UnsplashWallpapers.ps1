@@ -1,14 +1,16 @@
 #=============================================================================
 # Unsplash Wallpaper Downloader
 # Author: Claire R
-# Version: 1.1.0
+# Version: 1.2.0
 # Last Updated: June 2026
-# Purpose: Downloads up to 10 wallpapers per day from Unsplash across
-#          configured categories, sized to the largest screen, then sets
-#          a different image on each monitor.
+# Purpose: Downloads up to 10 wallpapers per day from Unsplash for one
+#          user-defined category at a time (rotates through up to 4),
+#          sized to the largest screen, then sets a different image on
+#          each monitor.
 #
 # FIRST RUN:
 # .\Get-UnsplashWallpapers.ps1 -SetupApiKey
+# .\Get-UnsplashWallpapers.ps1 -SetupCategories
 #
 # GETTING AN UNSPLASH API KEY (free):
 # 1. Go to https://unsplash.com/developers
@@ -20,11 +22,13 @@
 # USAGE:
 # .\Get-UnsplashWallpapers.ps1                      Download + set per-monitor wallpapers
 # .\Get-UnsplashWallpapers.ps1 -SetupApiKey         Store or update API key
+# .\Get-UnsplashWallpapers.ps1 -SetupCategories     Define up to 4 search categories
 # .\Get-UnsplashWallpapers.ps1 -SetupScheduledTask  Register daily Task Scheduler job
 #=============================================================================
 
 param(
     [switch]$SetupApiKey,
+    [switch]$SetupCategories,
     [switch]$SetupScheduledTask
 )
 
@@ -34,15 +38,7 @@ $ConfigDir         = "$env:APPDATA\UnsplashWallpapers"
 $ConfigFile        = "$ConfigDir\config.json"
 $WallpaperDir      = "$env:USERPROFILE\Pictures\Wallpapers\Unsplash"
 $MaxDailyDownloads = 10
-
-$Categories = @(
-    @{ Name = "Gaming";   Query = "gaming wallpaper setup" },
-    @{ Name = "Desktop";  Query = "minimal desktop background" },
-    @{ Name = "4K";       Query = "4k ultra hd wallpaper" },
-    @{ Name = "Dark";     Query = "dark aesthetic wallpaper" },
-    @{ Name = "Abstract"; Query = "abstract background" },
-    @{ Name = "Nature";   Query = "nature landscape background" }
-)
+$MaxCategories     = 4
 
 $script:DownloadedToday = 0
 
@@ -84,11 +80,9 @@ class WallpaperFactory {}
 
 function Set-PerMonitorWallpaper {
     param([string[]]$ImagePaths)
-
     $dw           = (New-Object WallpaperFactory) -as [IDesktopWallpaper]
     $monitorCount = [int]$dw.GetMonitorDevicePathCount()
-    $dw.SetPosition(4)  # 4 = Fill
-
+    $dw.SetPosition(4)  # Fill
     for ($i = 0; $i -lt $monitorCount; $i++) {
         $monitorId = $dw.GetMonitorDevicePathAt([uint32]$i)
         $img       = $ImagePaths[$i % $ImagePaths.Count]
@@ -124,14 +118,44 @@ function Get-Config {
 }
 
 function Save-Config {
-    param([string]$ApiKey, [int]$TodayCount = -1)
+    param(
+        [AllowNull()][string]  $ApiKey            = $null,
+        [AllowNull()][string[]]$Categories         = $null,
+        [int]                  $NextCategoryIndex  = -1,
+        [int]                  $TodayCount         = -1
+    )
     if (!(Test-Path $ConfigDir)) {
         New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
     }
-    $cfg = [ordered]@{ ApiKey = $ApiKey }
+
+    $cur = if (Test-Path $ConfigFile) { Get-Content $ConfigFile -Raw | ConvertFrom-Json } else { $null }
+
+    $cfg = [ordered]@{
+        ApiKey = if ($null -ne $ApiKey) {
+            $ApiKey
+        } elseif ($null -ne $cur -and $null -ne $cur.ApiKey) {
+            $cur.ApiKey
+        } else { "" }
+
+        Categories = if ($null -ne $Categories) {
+            $Categories
+        } elseif ($null -ne $cur -and $null -ne $cur.Categories) {
+            @($cur.Categories)
+        } else { @() }
+
+        NextCategoryIndex = if ($NextCategoryIndex -ge 0) {
+            $NextCategoryIndex
+        } elseif ($null -ne $cur -and $null -ne $cur.NextCategoryIndex) {
+            [int]$cur.NextCategoryIndex
+        } else { 0 }
+    }
+
     if ($TodayCount -ge 0) {
         $cfg.DownloadLog = [ordered]@{ Date = (Get-Date -Format "yyyy-MM-dd"); Count = $TodayCount }
+    } elseif ($null -ne $cur -and $null -ne $cur.DownloadLog) {
+        $cfg.DownloadLog = [ordered]@{ Date = $cur.DownloadLog.Date; Count = [int]$cur.DownloadLog.Count }
     }
+
     $cfg | ConvertTo-Json | Set-Content -Path $ConfigFile -Encoding UTF8
 }
 
@@ -155,6 +179,40 @@ function Invoke-SetupApiKey {
     }
     Save-Config -ApiKey $key.Trim()
     Write-Host "API key saved to: $ConfigFile" -ForegroundColor Green
+}
+
+function Invoke-SetupCategories {
+    Write-Host ""
+    Write-Host "=== Category Setup ===" -ForegroundColor Cyan
+    Write-Host "Enter up to $MaxCategories Unsplash search terms, one per category."
+    Write-Host "Examples: 'dark neon gaming', 'nature 4k forest', 'space nebula'"
+    Write-Host "Leave blank to finish early."
+    Write-Host ""
+
+    $cur = Get-Config
+    if ($null -ne $cur -and $null -ne $cur.Categories -and @($cur.Categories).Count -gt 0) {
+        Write-Host "Current categories:"
+        @($cur.Categories) | ForEach-Object { $i = 0 } { Write-Host "  $($i + 1). $_"; $i++ }
+        Write-Host ""
+    }
+
+    $newCategories = @()
+    for ($i = 1; $i -le $MaxCategories; $i++) {
+        $entry = (Read-Host "Category $i").Trim()
+        if ([string]::IsNullOrEmpty($entry)) { break }
+        $newCategories += $entry
+    }
+
+    if ($newCategories.Count -eq 0) {
+        Write-Host "No categories entered. Existing categories unchanged." -ForegroundColor Yellow
+        exit 0
+    }
+
+    Save-Config -Categories $newCategories -NextCategoryIndex 0
+    Write-Host ""
+    Write-Host "Saved $($newCategories.Count) categor$(if ($newCategories.Count -eq 1) { 'y' } else { 'ies' }):" -ForegroundColor Green
+    $newCategories | ForEach-Object { Write-Host "  - $_" }
+    Write-Host "Category rotation reset to start at category 1." -ForegroundColor Cyan
 }
 
 function Register-WallpaperTask {
@@ -194,22 +252,26 @@ function Register-WallpaperTask {
 # DOWNLOAD
 #=============================================================================
 
+function Get-FolderName {
+    param([string]$Query)
+    return ($Query -replace '[<>:"/\\|?*]', '_' -replace '\s+', '_').Trim('_')
+}
+
 function Get-UnsplashImages {
     param(
         [string]$ApiKey,
         [string]$Query,
-        [string]$CategoryName,
+        [string]$FolderName,
         [int]$Width,
         [int]$Height,
         [int]$Count
     )
 
-    $saveDir = Join-Path $WallpaperDir $CategoryName
+    $saveDir = Join-Path $WallpaperDir $FolderName
     if (!(Test-Path $saveDir)) {
         New-Item -ItemType Directory -Path $saveDir -Force | Out-Null
     }
 
-    # Always return existing files so the rotation pool stays full even on limit days
     $existingFiles = @(Get-ChildItem $saveDir -Filter "*.jpg" -ErrorAction SilentlyContinue |
         Select-Object -ExpandProperty FullName)
 
@@ -228,7 +290,7 @@ function Get-UnsplashImages {
     try {
         $response = Invoke-RestMethod -Uri $searchUrl -Headers $headers -Method Get
     } catch {
-        Write-Host "  API request failed for '$Query': $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  API request failed: $($_.Exception.Message)" -ForegroundColor Red
         return $existingFiles
     }
 
@@ -269,18 +331,27 @@ function Get-UnsplashImages {
 # MAIN
 #=============================================================================
 
-if ($SetupApiKey) { Invoke-SetupApiKey; exit 0 }
+if ($SetupApiKey)         { Invoke-SetupApiKey;       exit 0 }
+if ($SetupCategories)     { Invoke-SetupCategories;   exit 0 }
 
 $config = Get-Config
+
 if ($null -eq $config -or [string]::IsNullOrWhiteSpace($config.ApiKey)) {
     Write-Host "No API key configured. Run:" -ForegroundColor Yellow
     Write-Host "  .\Get-UnsplashWallpapers.ps1 -SetupApiKey" -ForegroundColor Cyan
     exit 1
 }
 
+$configCategories = @($config.Categories)
+if ($configCategories.Count -eq 0) {
+    Write-Host "No categories configured. Run:" -ForegroundColor Yellow
+    Write-Host "  .\Get-UnsplashWallpapers.ps1 -SetupCategories" -ForegroundColor Cyan
+    exit 1
+}
+
 if ($SetupScheduledTask) { Register-WallpaperTask; exit 0 }
 
-# Determine downloads remaining today
+# Determine today's download count
 $today = Get-Date -Format "yyyy-MM-dd"
 if ($null -ne $config.DownloadLog -and $config.DownloadLog.Date -eq $today) {
     $script:DownloadedToday = [int]$config.DownloadLog.Count
@@ -289,6 +360,13 @@ if ($null -ne $config.DownloadLog -and $config.DownloadLog.Date -eq $today) {
 }
 $remainingToday = $MaxDailyDownloads - $script:DownloadedToday
 
+# Pick category for this run and advance the index
+$currentIdx  = [int]($config.NextCategoryIndex ?? 0) % $configCategories.Count
+$nextIdx     = ($currentIdx + 1) % $configCategories.Count
+$query       = $configCategories[$currentIdx]
+$folderName  = Get-FolderName -Query $query
+
+Write-Host "Category ($($currentIdx + 1)/$($configCategories.Count)): $query" -ForegroundColor Cyan
 Write-Host "Downloads today: $($script:DownloadedToday) / $MaxDailyDownloads  ($remainingToday remaining)" -ForegroundColor Cyan
 
 if (!(Test-Path $WallpaperDir)) {
@@ -299,32 +377,25 @@ $resolution = Get-MaxScreenResolution
 Write-Host "Largest screen: $($resolution.Width) x $($resolution.Height)" -ForegroundColor Cyan
 Write-Host ""
 
-# Spread remaining budget evenly across categories; always fetch existing files when at limit
-$perCategory = if ($remainingToday -gt 0) {
-    [Math]::Max(1, [Math]::Ceiling($remainingToday / $Categories.Count))
-} else { 0 }
+$categoryFiles = Get-UnsplashImages `
+    -ApiKey     $config.ApiKey `
+    -Query      $query `
+    -FolderName $folderName `
+    -Width      $resolution.Width `
+    -Height     $resolution.Height `
+    -Count      $remainingToday
 
-$allWallpapers = @()
+# Persist updated index and download count
+Save-Config -NextCategoryIndex $nextIdx -TodayCount $script:DownloadedToday
 
-foreach ($category in $Categories) {
-    Write-Host "[$($category.Name)] $($category.Query)"
-    $files = Get-UnsplashImages `
-        -ApiKey       $config.ApiKey `
-        -Query        $category.Query `
-        -CategoryName $category.Name `
-        -Width        $resolution.Width `
-        -Height       $resolution.Height `
-        -Count        $perCategory
-    $allWallpapers += $files
-}
-
-Save-Config -ApiKey $config.ApiKey -TodayCount $script:DownloadedToday
+# Rotate wallpapers from the full library (all categories downloaded so far)
+$allWallpapers = @(Get-ChildItem $WallpaperDir -Filter "*.jpg" -Recurse -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty FullName)
 
 Write-Host ""
 Write-Host "Total wallpapers in library: $($allWallpapers.Count)" -ForegroundColor Cyan
 
 if ($allWallpapers.Count -gt 0) {
-    # Pick 2 different images for 2 monitors; pad with first if library has only 1
     $pickCount = [Math]::Min($allWallpapers.Count, 2)
     $picks     = @($allWallpapers | Get-Random -Count $pickCount)
     while ($picks.Count -lt 2) { $picks += $picks[0] }
