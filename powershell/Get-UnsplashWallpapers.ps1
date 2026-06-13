@@ -366,7 +366,7 @@ Update-Config @{
 }
 
 # Rotate wallpapers from the full library (all categories downloaded so far)
-$allWallpapers = @(Get-ChildItem $WallpaperDir -Filter "*.jpg" -ErrorAction SilentlyContinue |
+$allWallpapers = @(Get-ChildItem $WallpaperDir -Filter "*.jpg" -Recurse -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty FullName)
 
 Write-Host ""
