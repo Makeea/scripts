@@ -117,45 +117,20 @@ function Get-Config {
     return $null
 }
 
-function Save-Config {
-    param(
-        [AllowNull()][string]  $ApiKey            = $null,
-        [AllowNull()][string[]]$Categories         = $null,
-        [int]                  $NextCategoryIndex  = -1,
-        [int]                  $TodayCount         = -1
-    )
+function Update-Config {
+    param([hashtable]$Patch)
     if (!(Test-Path $ConfigDir)) {
         New-Item -ItemType Directory -Path $ConfigDir -Force | Out-Null
     }
-
-    $cur = if (Test-Path $ConfigFile) { Get-Content $ConfigFile -Raw | ConvertFrom-Json } else { $null }
-
-    $cfg = [ordered]@{
-        ApiKey = if ($null -ne $ApiKey) {
-            $ApiKey
-        } elseif ($null -ne $cur -and $null -ne $cur.ApiKey) {
-            $cur.ApiKey
-        } else { "" }
-
-        Categories = if ($null -ne $Categories) {
-            $Categories
-        } elseif ($null -ne $cur -and $null -ne $cur.Categories) {
-            @($cur.Categories)
-        } else { @() }
-
-        NextCategoryIndex = if ($NextCategoryIndex -ge 0) {
-            $NextCategoryIndex
-        } elseif ($null -ne $cur -and $null -ne $cur.NextCategoryIndex) {
-            [int]$cur.NextCategoryIndex
-        } else { 0 }
+    $cfg = if (Test-Path $ConfigFile) {
+        $raw = Get-Content $ConfigFile -Raw | ConvertFrom-Json
+        $ht  = [ordered]@{}
+        $raw.PSObject.Properties | ForEach-Object { $ht[$_.Name] = $_.Value }
+        $ht
+    } else {
+        [ordered]@{}
     }
-
-    if ($TodayCount -ge 0) {
-        $cfg.DownloadLog = [ordered]@{ Date = (Get-Date -Format "yyyy-MM-dd"); Count = $TodayCount }
-    } elseif ($null -ne $cur -and $null -ne $cur.DownloadLog) {
-        $cfg.DownloadLog = [ordered]@{ Date = $cur.DownloadLog.Date; Count = [int]$cur.DownloadLog.Count }
-    }
-
+    foreach ($key in $Patch.Keys) { $cfg[$key] = $Patch[$key] }
     $cfg | ConvertTo-Json | Set-Content -Path $ConfigFile -Encoding UTF8
 }
 
@@ -177,7 +152,7 @@ function Invoke-SetupApiKey {
         Write-Host "No key entered. Exiting." -ForegroundColor Red
         exit 1
     }
-    Save-Config -ApiKey $key.Trim()
+    Update-Config @{ ApiKey = $key.Trim() }
     Write-Host "API key saved to: $ConfigFile" -ForegroundColor Green
 }
 
@@ -208,7 +183,7 @@ function Invoke-SetupCategories {
         exit 0
     }
 
-    Save-Config -Categories $newCategories -NextCategoryIndex 0
+    Update-Config @{ Categories = $newCategories; NextCategoryIndex = 0 }
     Write-Host ""
     Write-Host "Saved $($newCategories.Count) categor$(if ($newCategories.Count -eq 1) { 'y' } else { 'ies' }):" -ForegroundColor Green
     $newCategories | ForEach-Object { Write-Host "  - $_" }
@@ -252,27 +227,26 @@ function Register-WallpaperTask {
 # DOWNLOAD
 #=============================================================================
 
-function Get-FolderName {
+function Get-CategoryPrefix {
     param([string]$Query)
-    return ($Query -replace '[<>:"/\\|?*]', '_' -replace '\s+', '_').Trim('_')
+    return ($Query -replace '[<>:"/\\|?*]', '' -replace '\s+', '-').Trim('-')
 }
 
 function Get-UnsplashImages {
     param(
         [string]$ApiKey,
         [string]$Query,
-        [string]$FolderName,
+        [string]$Prefix,
         [int]$Width,
         [int]$Height,
         [int]$Count
     )
 
-    $saveDir = Join-Path $WallpaperDir $FolderName
-    if (!(Test-Path $saveDir)) {
-        New-Item -ItemType Directory -Path $saveDir -Force | Out-Null
+    if (!(Test-Path $WallpaperDir)) {
+        New-Item -ItemType Directory -Path $WallpaperDir -Force | Out-Null
     }
 
-    $existingFiles = @(Get-ChildItem $saveDir -Filter "*.jpg" -ErrorAction SilentlyContinue |
+    $existingFiles = @(Get-ChildItem $WallpaperDir -Filter "$Prefix-*.jpg" -ErrorAction SilentlyContinue |
         Select-Object -ExpandProperty FullName)
 
     if ($Count -le 0 -or $script:DownloadedToday -ge $MaxDailyDownloads) {
@@ -307,7 +281,7 @@ function Get-UnsplashImages {
             break
         }
 
-        $filePath = Join-Path $saveDir "$($photo.id).jpg"
+        $filePath = Join-Path $WallpaperDir "$Prefix-$($photo.id).jpg"
         if (Test-Path $filePath) { continue }
 
         $imageUrl = "{0}&w={1}&h={2}&fit=crop&q=85" -f $photo.urls.raw, $Width, $Height
@@ -316,7 +290,7 @@ function Get-UnsplashImages {
             Invoke-WebRequest -Uri $imageUrl -OutFile $filePath -UseBasicParsing
             Invoke-RestMethod -Uri $photo.links.download_location -Headers $headers -Method Get | Out-Null
             $script:DownloadedToday++
-            Write-Host "  Downloaded: $($photo.id).jpg  [$script:DownloadedToday/$MaxDailyDownloads]" -ForegroundColor Gray
+            Write-Host "  Downloaded: $Prefix-$($photo.id).jpg  [$script:DownloadedToday/$MaxDailyDownloads]" -ForegroundColor Gray
             $collected.Add($filePath)
         } catch {
             Write-Host "  Failed [$($photo.id)]: $($_.Exception.Message)" -ForegroundColor Red
@@ -361,10 +335,10 @@ if ($null -ne $config.DownloadLog -and $config.DownloadLog.Date -eq $today) {
 $remainingToday = $MaxDailyDownloads - $script:DownloadedToday
 
 # Pick category for this run and advance the index
-$currentIdx  = [int]($config.NextCategoryIndex ?? 0) % $configCategories.Count
-$nextIdx     = ($currentIdx + 1) % $configCategories.Count
-$query       = $configCategories[$currentIdx]
-$folderName  = Get-FolderName -Query $query
+$currentIdx = [int]($config.NextCategoryIndex ?? 0) % $configCategories.Count
+$nextIdx    = ($currentIdx + 1) % $configCategories.Count
+$query      = $configCategories[$currentIdx]
+$prefix     = Get-CategoryPrefix -Query $query
 
 Write-Host "Category ($($currentIdx + 1)/$($configCategories.Count)): $query" -ForegroundColor Cyan
 Write-Host "Downloads today: $($script:DownloadedToday) / $MaxDailyDownloads  ($remainingToday remaining)" -ForegroundColor Cyan
@@ -377,19 +351,22 @@ $resolution = Get-MaxScreenResolution
 Write-Host "Largest screen: $($resolution.Width) x $($resolution.Height)" -ForegroundColor Cyan
 Write-Host ""
 
-$categoryFiles = Get-UnsplashImages `
-    -ApiKey     $config.ApiKey `
-    -Query      $query `
-    -FolderName $folderName `
-    -Width      $resolution.Width `
-    -Height     $resolution.Height `
-    -Count      $remainingToday
+Get-UnsplashImages `
+    -ApiKey  $config.ApiKey `
+    -Query   $query `
+    -Prefix  $prefix `
+    -Width   $resolution.Width `
+    -Height  $resolution.Height `
+    -Count   $remainingToday | Out-Null
 
 # Persist updated index and download count
-Save-Config -NextCategoryIndex $nextIdx -TodayCount $script:DownloadedToday
+Update-Config @{
+    NextCategoryIndex = $nextIdx
+    DownloadLog       = [ordered]@{ Date = $today; Count = $script:DownloadedToday }
+}
 
 # Rotate wallpapers from the full library (all categories downloaded so far)
-$allWallpapers = @(Get-ChildItem $WallpaperDir -Filter "*.jpg" -Recurse -ErrorAction SilentlyContinue |
+$allWallpapers = @(Get-ChildItem $WallpaperDir -Filter "*.jpg" -ErrorAction SilentlyContinue |
     Select-Object -ExpandProperty FullName)
 
 Write-Host ""
