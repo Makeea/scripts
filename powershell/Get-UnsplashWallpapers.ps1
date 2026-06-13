@@ -46,12 +46,12 @@ $script:DownloadedToday = 0
 # PER-MONITOR WALLPAPER (IDesktopWallpaper COM interface)
 #=============================================================================
 
-if (-not ('WallpaperFactory' -as [type])) {
+if (-not ([System.Management.Automation.PSTypeName]'IDesktopWallpaper').Type) {
     Add-Type -TypeDefinition @"
 using System.Runtime.InteropServices;
 
 [ComImport, Guid("B92B56A9-8B55-4E14-9A89-0199BBB6F93B"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IDesktopWallpaper {
+public interface IDesktopWallpaper {
     void SetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorID, [MarshalAs(UnmanagedType.LPWStr)] string wallpaper);
     [return: MarshalAs(UnmanagedType.LPWStr)] string GetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string monitorID);
     [return: MarshalAs(UnmanagedType.LPWStr)] string GetMonitorDevicePathAt([MarshalAs(UnmanagedType.U4)] uint monitorIndex);
@@ -71,16 +71,14 @@ interface IDesktopWallpaper {
 }
 
 [StructLayout(LayoutKind.Sequential)]
-struct RECT { public int Left, Top, Right, Bottom; }
-
-[ComImport, Guid("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD")]
-class WallpaperFactory {}
+public struct RECT { public int Left, Top, Right, Bottom; }
 "@
 }
 
 function Set-PerMonitorWallpaper {
     param([string[]]$ImagePaths)
-    $dw           = (New-Object WallpaperFactory) -as [IDesktopWallpaper]
+    $clsid        = [Guid]"C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD"
+    $dw           = [Activator]::CreateInstance([Type]::GetTypeFromCLSID($clsid)) -as [IDesktopWallpaper]
     $monitorCount = [int]$dw.GetMonitorDevicePathCount()
     $dw.SetPosition(4)  # Fill
     for ($i = 0; $i -lt $monitorCount; $i++) {
