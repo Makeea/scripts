@@ -29,7 +29,8 @@
 param(
     [switch]$SetupApiKey,
     [switch]$SetupCategories,
-    [switch]$SetupScheduledTask
+    [switch]$SetupScheduledTask,
+    [switch]$Reset
 )
 
 $ErrorActionPreference = "Stop"
@@ -307,6 +308,11 @@ function Get-UnsplashImages {
 
 if ($SetupApiKey)         { Invoke-SetupApiKey;       exit 0 }
 if ($SetupCategories)     { Invoke-SetupCategories;   exit 0 }
+if ($Reset) {
+    Update-Config @{ NextCategoryIndex = 0; DownloadLog = [ordered]@{ Date = ""; Count = 0 } }
+    Write-Host "Reset: category rotation back to 1, download counter cleared." -ForegroundColor Green
+    exit 0
+}
 
 $config = Get-Config
 
