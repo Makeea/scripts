@@ -23,7 +23,8 @@
 # .\Get-UnsplashWallpapers.ps1                      Download + set per-monitor wallpapers
 # .\Get-UnsplashWallpapers.ps1 -SetupApiKey         Store or update API key
 # .\Get-UnsplashWallpapers.ps1 -SetupCategories     Define up to 4 search categories
-# .\Get-UnsplashWallpapers.ps1 -SetupScheduledTask  Register daily Task Scheduler job
+# .\Get-UnsplashWallpapers.ps1 -SetupScheduledTask         Register daily Task Scheduler job (8 AM)
+# .\Get-UnsplashWallpapers.ps1 -SetupScheduledTask -Hourly Register hourly Task Scheduler job
 # .\Get-UnsplashWallpapers.ps1 -Reset               Clear download counter + restart rotation
 #=============================================================================
 
@@ -31,6 +32,7 @@ param(
     [switch]$SetupApiKey,
     [switch]$SetupCategories,
     [switch]$SetupScheduledTask,
+    [switch]$Hourly,
     [switch]$Reset
 )
 
@@ -48,13 +50,13 @@ $script:DownloadedToday = 0
 # PER-MONITOR WALLPAPER
 #=============================================================================
 
-if (-not ([System.Management.Automation.PSTypeName]'WallpaperCom.Api').Type) {
+if (-not ([System.Management.Automation.PSTypeName]'WpCom.Api').Type) {
     Add-Type -TypeDefinition @'
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace WallpaperCom {
+namespace WpCom {
     [ComImport, Guid("B92B56A9-8B55-4E14-9A89-0199BBB6F93B"),
      InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     public interface IDesktopWallpaper {
@@ -82,19 +84,23 @@ namespace WallpaperCom {
         [return: MarshalAs(UnmanagedType.Bool)] bool Enable([MarshalAs(UnmanagedType.Bool)] bool enable);
     }
 
-    [ComImport, Guid("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD"),
-     CoClass(typeof(DesktopWallpaperImpl))]
-    public interface DesktopWallpaper : IDesktopWallpaper {}
-
-    [ComImport, Guid("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD")]
-    public class DesktopWallpaperImpl {}
-
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
 
     public static class Api {
+        [DllImport("ole32.dll")]
+        private static extern int CoCreateInstance(
+            ref Guid rclsid, IntPtr pUnkOuter, uint dwClsContext,
+            ref Guid riid,   out IntPtr ppv);
+
         public static string[] Set(string[] paths) {
-            var dw    = (IDesktopWallpaper)(new DesktopWallpaper());
+            Guid clsid = new Guid("C2CF3110-460E-4FC1-B9D0-8A1C0C9CC4BD");
+            Guid iid   = new Guid("00000000-0000-0000-C000-000000000046"); // IUnknown
+            IntPtr pUnk;
+            int hr = CoCreateInstance(ref clsid, IntPtr.Zero, 23, ref iid, out pUnk);
+            if (hr < 0) throw new COMException("CoCreateInstance failed", hr);
+            var dw = (IDesktopWallpaper)Marshal.GetObjectForIUnknown(pUnk);
+            Marshal.Release(pUnk);
             dw.SetPosition(4); // Fill
             uint count = dw.GetMonitorDevicePathCount();
             var  lines = new string[count];
@@ -113,8 +119,12 @@ namespace WallpaperCom {
 
 function Set-PerMonitorWallpaper {
     param([string[]]$ImagePaths)
-    [WallpaperCom.Api]::Set($ImagePaths) | ForEach-Object {
-        Write-Host "  $_" -ForegroundColor Green
+    try {
+        [WpCom.Api]::Set($ImagePaths) | ForEach-Object {
+            Write-Host "  $_" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  Wallpaper error: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
@@ -179,7 +189,7 @@ function Invoke-SetupCategories {
     $cur = Get-Config
     if ($null -ne $cur -and $null -ne $cur.Categories -and @($cur.Categories).Count -gt 0) {
         Write-Host "Current categories:"
-        @($cur.Categories) | ForEach-Object { $i = 0 } { Write-Host "  $($i + 1). $_"; $i++ }
+        $i = 0; @($cur.Categories) | ForEach-Object { Write-Host "  $($i + 1). $_"; $i++ }
         Write-Host ""
     }
 
@@ -203,6 +213,8 @@ function Invoke-SetupCategories {
 }
 
 function Register-WallpaperTask {
+    param([switch]$Hourly)
+
     $scriptPath = $PSCommandPath
     if ([string]::IsNullOrEmpty($scriptPath)) {
         Write-Host "Cannot determine script path. Run from a file, not the console." -ForegroundColor Red
@@ -218,9 +230,20 @@ function Register-WallpaperTask {
         exit 1
     }
 
-    $action    = New-ScheduledTaskAction -Execute $pwshExe `
+    $action = New-ScheduledTaskAction -Execute $pwshExe `
         -Argument "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
-    $trigger   = New-ScheduledTaskTrigger -Daily -At "08:00AM"
+
+    if ($Hourly) {
+        $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+            -RepetitionInterval (New-TimeSpan -Hours 1)
+        $desc    = "Downloads and rotates Unsplash wallpapers every hour"
+        $freq    = "every hour"
+    } else {
+        $trigger = New-ScheduledTaskTrigger -Daily -At "08:00AM"
+        $desc    = "Downloads and rotates Unsplash wallpapers daily"
+        $freq    = "daily at 8:00 AM"
+    }
+
     $settings  = New-ScheduledTaskSettingsSet `
         -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
         -StartWhenAvailable `
@@ -229,10 +252,10 @@ function Register-WallpaperTask {
 
     Register-ScheduledTask -TaskName "UnsplashWallpaperRefresh" `
         -Action $action -Trigger $trigger -Settings $settings -Principal $principal `
-        -Description "Downloads and rotates Unsplash wallpapers daily" -Force | Out-Null
+        -Description $desc -Force | Out-Null
 
     Write-Host "Scheduled task registered: 'UnsplashWallpaperRefresh'" -ForegroundColor Green
-    Write-Host "Runs daily at 8:00 AM using: $pwshExe" -ForegroundColor Cyan
+    Write-Host "Runs $freq using: $pwshExe" -ForegroundColor Cyan
 }
 
 #=============================================================================
@@ -338,7 +361,7 @@ if ($configCategories.Count -eq 0) {
     exit 1
 }
 
-if ($SetupScheduledTask) { Register-WallpaperTask; exit 0 }
+if ($SetupScheduledTask) { Register-WallpaperTask -Hourly:$Hourly; exit 0 }
 
 # Determine today's download count
 $today = Get-Date -Format "yyyy-MM-dd"
