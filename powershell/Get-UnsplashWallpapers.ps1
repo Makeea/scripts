@@ -116,21 +116,6 @@ function Set-PerMonitorWallpaper {
 }
 
 #=============================================================================
-# SCREEN RESOLUTION
-#=============================================================================
-
-function Get-MaxScreenResolution {
-    Add-Type -AssemblyName System.Windows.Forms
-    $best = @{ Width = 1920; Height = 1080 }
-    foreach ($s in [System.Windows.Forms.Screen]::AllScreens) {
-        if (($s.Bounds.Width * $s.Bounds.Height) -gt ($best.Width * $best.Height)) {
-            $best = @{ Width = $s.Bounds.Width; Height = $s.Bounds.Height }
-        }
-    }
-    return $best
-}
-
-#=============================================================================
 # CONFIG
 #=============================================================================
 
@@ -261,8 +246,6 @@ function Get-UnsplashImages {
         [string]$ApiKey,
         [string]$Query,
         [string]$Prefix,
-        [int]$Width,
-        [int]$Height,
         [int]$Count
     )
 
@@ -311,9 +294,8 @@ function Get-UnsplashImages {
         try {
             # download_location returns the authorized image URL and registers the
             # download event with Unsplash in one call (required by API guidelines)
-            $dlInfo   = Invoke-RestMethod -Uri $photo.links.download_location -Headers $headers -Method Get
-            $imageUrl = "$($dlInfo.url)&w=$Width&h=$Height&fit=crop&q=85"
-            Invoke-WebRequest -Uri $imageUrl -OutFile $filePath -UseBasicParsing
+            $dlInfo = Invoke-RestMethod -Uri $photo.links.download_location -Headers $headers -Method Get
+            Invoke-WebRequest -Uri $dlInfo.url -Headers $headers -OutFile $filePath -UseBasicParsing
             $script:DownloadedToday++
             Write-Host "  Downloaded: $Prefix-$($photo.id).jpg  [$script:DownloadedToday/$MaxDailyDownloads]" -ForegroundColor Gray
             $collected.Add($filePath)
@@ -377,16 +359,12 @@ if (!(Test-Path $WallpaperDir)) {
     New-Item -ItemType Directory -Path $WallpaperDir -Force | Out-Null
 }
 
-$resolution = Get-MaxScreenResolution
-Write-Host "Largest screen: $($resolution.Width) x $($resolution.Height)" -ForegroundColor Cyan
 Write-Host ""
 
 Get-UnsplashImages `
     -ApiKey  $config.ApiKey `
     -Query   $query `
     -Prefix  $prefix `
-    -Width   $resolution.Width `
-    -Height  $resolution.Height `
     -Count   $remainingToday | Out-Null
 
 Update-Config @{
