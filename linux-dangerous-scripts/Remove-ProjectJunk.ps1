@@ -88,7 +88,11 @@ NOTE: Archive files (.zip, .rar, .7z, etc.) are never touched.
 
 SAFETY FEATURES:
   • Always run with -DryRun first to preview changes
-  • Interactive prompts with 5-second timeouts for each category
+  • Interactive prompts default to SKIP - press 'y' within 5 seconds to
+    confirm deletion for each category, anything else (timeout, Enter, no
+    interactive console) skips it
+  • Refuses to run destructively at all if no interactive console is
+    detected, unless -DryRun or -Force is given
   • Full path display before deletion
   • Comprehensive error handling and logging
   • Git integration to remove tracked files
@@ -107,6 +111,23 @@ if (-not (Test-Path $Path -PathType Container)) {
 
 # Convert to absolute path
 $Path = Resolve-Path $Path
+
+# Refuse to run destructively without a real interactive console. Without
+# this guard, every Show-AndPrompt call below silently falls through its
+# timeout (key detection doesn't work in some terminal hosts) and defaults
+# to deleting - which is exactly how this script previously wiped most of a
+# project instead of just its junk files.
+$consoleIsInteractive = $true
+try {
+    $consoleIsInteractive = -not [Console]::IsInputRedirected
+} catch {
+    $consoleIsInteractive = $false
+}
+if (-not $consoleIsInteractive -and -not $DryRun -and -not $Force) {
+    Write-Host "Error: No interactive console detected (input is redirected or unavailable)." -ForegroundColor Red
+    Write-Host "Re-run with -DryRun to preview changes, or -Force to proceed without prompts (use with caution)." -ForegroundColor Red
+    exit 1
+}
 
 # Initialize statistics
 $script:stats = @{
@@ -235,32 +256,39 @@ function Show-AndPrompt {
         }
     }
     
-    # Interactive prompt with fixed timeout
+    # Interactive prompt with fixed timeout. Anything other than an explicit
+    # 'y' - timeout, Enter, any other key, or a console that throws because
+    # input is redirected/unavailable - must skip, never delete. Do not
+    # flip this default: a "proceed by default" version of this prompt is
+    # what previously deleted most of a project instead of just its junk.
     if (-not $DryRun -and -not $Force) {
-        Write-LogMessage "INFO" "Delete all items in '$Category'? Press 'n' to skip, or wait 5 seconds to proceed..." "Cyan"
-        
-        # Use a simpler approach without jobs
+        Write-LogMessage "INFO" "Delete all items in '$Category'? Press 'y' to confirm, or wait 5 seconds to skip (safe default)..." "Cyan"
+
         $timeout = 50  # 5 seconds in 100ms intervals
-        $response = ""
-        
-        for ($i = 0; $i -lt $timeout; $i++) {
-            if ([Console]::KeyAvailable) {
-                $key = [Console]::ReadKey($true)
-                if ($key.KeyChar -eq 'n' -or $key.KeyChar -eq 'N') {
-                    Write-Host "n"
-                    Write-LogMessage "INFO" "Skipped $Category" "Yellow"
-                    return $false
-                } elseif ($key.Key -eq [ConsoleKey]::Enter) {
-                    Write-Host ""
+        $confirmed = $false
+
+        try {
+            for ($i = 0; $i -lt $timeout; $i++) {
+                if ([Console]::KeyAvailable) {
+                    $key = [Console]::ReadKey($true)
+                    Write-Host $key.KeyChar
+                    if ($key.KeyChar -eq 'y' -or $key.KeyChar -eq 'Y') {
+                        $confirmed = $true
+                    }
                     break
-                } else {
-                    Write-Host $key.KeyChar -NoNewline
                 }
+                Start-Sleep -Milliseconds 100
             }
-            Start-Sleep -Milliseconds 100
+        } catch {
+            # Console input unavailable (redirected/non-interactive) - same
+            # as a timeout: fall through to the skip branch below.
         }
-        
-        Write-LogMessage "INFO" "Proceeding with cleanup..." "Green"
+
+        if (-not $confirmed) {
+            Write-LogMessage "INFO" "Skipped $Category" "Yellow"
+            return $false
+        }
+        Write-LogMessage "INFO" "Confirmed - proceeding with cleanup..." "Green"
     }
     return $true
 }
@@ -362,7 +390,7 @@ $filePatterns = @{
 
 # Folder patterns by category
 $folderPatterns = @{
-    "Build Directories" = @("node_modules", "__pycache__", ".pytest_cache", "target", "build", "dist", "bin", "obj", ".next", ".nuxt")
+    "Build Directories" = @("node_modules", "__pycache__", ".pytest_cache", "target", "build", "dist", "obj", ".next", ".nuxt")
     "Cache Directories" = @(".cache", "cache", ".tmp", "tmp", "temp", ".sass-cache", ".parcel-cache")
     "System Directories" = @(".Trash-*", ".AppleDouble", ".LSOverride", "System Volume Information", "`$RECYCLE.BIN")
     "IDE Directories" = @(".vscode", ".idea", ".settings", ".metadata", ".vs", ".venv", "venv", ".tox")

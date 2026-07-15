@@ -89,6 +89,13 @@ show_help() {
     echo ""
     echo -e "  ${YELLOW}NOTE:${NC} Archive files (.zip, .rar, .7z, etc.) are never touched."
     echo ""
+    echo "SAFETY:"
+    echo "  Prompts default to SKIP - press 'y' within 5 seconds to confirm"
+    echo "  deletion for each category; anything else (timeout, Enter, no"
+    echo "  interactive terminal) skips it. Refuses to run destructively at"
+    echo "  all without an interactive terminal unless --dry-run or --force"
+    echo "  is given."
+    echo ""
     echo "Make executable: chmod +x remove-project-junk.sh"
 }
 
@@ -159,6 +166,17 @@ fi
 
 # Convert to absolute path
 TARGET_PATH=$(realpath "$TARGET_PATH")
+
+# Refuse to run destructively without a real interactive terminal. Without
+# this guard, every show_and_prompt call below hits `read -t 5` on stdin
+# that isn't a tty, returns instantly, and falls into the "proceed" branch -
+# which is exactly how this script previously wiped most of a project
+# instead of just its junk files.
+if [[ ! -t 0 && "$DRY_RUN" == false && "$FORCE" == false ]]; then
+    echo -e "${RED}Error: No interactive terminal detected (stdin is redirected or unavailable).${NC}"
+    echo -e "${RED}Re-run with --dry-run to preview changes, or --force to proceed without prompts (use with caution).${NC}"
+    exit 1
+fi
 
 # Initialize logging
 if [[ -n "$LOG_FILE" ]]; then
@@ -277,19 +295,20 @@ show_and_prompt() {
         fi
     done
     
-    # Interactive prompt
+    # Interactive prompt. Anything other than an explicit 'y' response -
+    # timeout, EOF (non-interactive/redirected stdin), plain Enter, or any
+    # other input - must skip, never delete. Do not flip this default: a
+    # "proceed by default" version of this prompt is what previously
+    # deleted most of a project instead of just its junk.
     if [[ "$DRY_RUN" == false && "$FORCE" == false ]]; then
-        echo -e -n "${CYAN}Delete all items in '$category'? You have 5 seconds to decide (default: Yes)...${NC}\n"
-        echo -e -n "${CYAN}Press 'n' and Enter to skip, or wait 5 seconds to proceed: ${NC}"
-        
-        if read -t 5 -r response; then
-            if [[ "$response" =~ ^[nN] ]]; then
-                log_message "INFO" "$YELLOW" "Skipped $category"
-                return 1
-            fi
+        echo -e -n "${CYAN}Delete all items in '$category'? Press 'y' and Enter to confirm, or wait 5 seconds to skip (safe default): ${NC}"
+
+        if read -t 5 -r response && [[ "$response" =~ ^[yY] ]]; then
+            log_message "INFO" "$GREEN" "Confirmed - proceeding with cleanup..."
         else
             echo ""
-            log_message "INFO" "$GREEN" "Time expired - proceeding with cleanup..."
+            log_message "INFO" "$YELLOW" "Skipped $category"
+            return 1
         fi
     fi
     return 0
@@ -384,7 +403,7 @@ file_patterns["Cache Files"]=".eslintcache .sass-cache *.cache .nyc_output .cove
 
 # Folder patterns by category
 declare -A folder_patterns
-folder_patterns["Build Directories"]="node_modules __pycache__ .pytest_cache target build dist bin obj .next .nuxt"
+folder_patterns["Build Directories"]="node_modules __pycache__ .pytest_cache target build dist obj .next .nuxt"
 folder_patterns["Cache Directories"]=".cache cache .tmp tmp temp .sass-cache .parcel-cache"
 folder_patterns["System Directories"]=".Trash-* .AppleDouble .LSOverride"
 folder_patterns["IDE Directories"]=".vscode .idea .settings .metadata .vs .venv venv .tox"

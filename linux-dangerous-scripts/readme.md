@@ -64,7 +64,14 @@ A comprehensive and potentially destructive project cleanup script for Windows t
 
 ### 🛡️ Safety Features
 
-- **Interactive prompts** with 5-second timeouts for each category
+- **Interactive prompts default to skip** - press `y` within 5 seconds to
+  confirm deletion for each category; a timeout, Enter, or any other
+  response skips it. Both scripts previously defaulted the *opposite* way
+  (no response = delete), which is how a run against a real project once
+  deleted almost everything instead of just its junk files.
+- **Refuses to run destructively without an interactive terminal** - if
+  stdin isn't a real console/tty, the script exits immediately unless you
+  pass `-DryRun`/`--dry-run` or `-Force`/`--force`
 - **Full path display** before deletion with file sizes
 - **Git integration** removes tracked junk files from version control
 - **Comprehensive logging** with timestamps and error tracking
