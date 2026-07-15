@@ -28,7 +28,6 @@ param(
     [switch]$OnlySystemFiles,           # Clean only OS system files
     [switch]$OnlyBuildFiles,            # Clean only build artifacts
     [switch]$SkipGit,                   # Don't remove from Git tracking
-    [switch]$SkipArchives,              # Don't delete archive files
     [switch]$SkipEmptyDirs,             # Don't remove empty directories
     
     # Custom options
@@ -60,7 +59,6 @@ CLEANUP MODES:
   -OnlySystemFiles     Clean only OS system files
   -OnlyBuildFiles      Clean only build artifacts and cache
   -SkipGit             Don't remove from Git tracking
-  -SkipArchives        Don't delete archive files
   -SkipEmptyDirs       Don't remove empty directories
 
 CUSTOM OPTIONS:
@@ -72,7 +70,7 @@ HELP:
 EXAMPLES:
   .\Remove-ProjectJunk.ps1 -DryRun
   .\Remove-ProjectJunk.ps1 -OnlySystemFiles
-  .\Remove-ProjectJunk.ps1 -Force -SkipArchives
+  .\Remove-ProjectJunk.ps1 -Force -SkipGit
   .\Remove-ProjectJunk.ps1 -Path "C:\MyProject" -Verbose -LogFile "cleanup.log"
 
 WHAT IT CLEANS:
@@ -84,8 +82,9 @@ WHAT IT CLEANS:
   ✓ Logs: *.log, npm-debug.log*, yarn-debug.log*
   ✓ Backups: *.bak, *.swp, *.tmp, *.old
   ✓ Compiled: *.pyc, *.class, *.o, *.obj
-  ✓ Archives: *.zip, *.rar, *.7z (with confirmation)
   ✓ Empty directories
+
+NOTE: Archive files (.zip, .rar, .7z, etc.) are never touched.
 
 SAFETY FEATURES:
   • Always run with -DryRun first to preview changes
@@ -164,7 +163,6 @@ if (-not $Quiet) {
     if ($OnlySystemFiles) { $options += "OnlySystemFiles" }
     if ($OnlyBuildFiles) { $options += "OnlyBuildFiles" }
     if ($SkipGit) { $options += "SkipGit" }
-    if ($SkipArchives) { $options += "SkipArchives" }
     
     if ($options.Count -gt 0) {
         Write-LogMessage "INFO" "Options: $($options -join ', ')" "Cyan"
@@ -442,21 +440,6 @@ if (-not $OnlySystemFiles) {
     
     if (Show-AndPrompt "Compiled Files" "files" $compiledFiles) {
         Remove-ItemsSafely "file" $compiledFiles
-    }
-}
-
-# Handle archive files
-if (-not $OnlySystemFiles -and -not $SkipArchives) {
-    $archiveFiles = @()
-    $archiveExts = @("*.zip", "*.rar", "*.7z", "*.tar", "*.gz", "*.bz2", "*.xz")
-    
-    foreach ($ext in $archiveExts) {
-        $files = Get-ChildItem -Path $Path -Filter $ext -Recurse -File -Force -ErrorAction SilentlyContinue
-        $archiveFiles += $files
-    }
-    
-    if (Show-AndPrompt "Archive Files (CAUTION: May contain important backups!)" "files" $archiveFiles) {
-        Remove-ItemsSafely "file" $archiveFiles
     }
 }
 

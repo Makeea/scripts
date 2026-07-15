@@ -28,7 +28,6 @@ FORCE=false
 VERBOSE=false
 QUIET=false
 SKIP_GIT=false
-SKIP_ARCHIVES=false
 ONLY_SYSTEM_FILES=false
 ONLY_BUILD_FILES=false
 SKIP_EMPTY_DIRS=false
@@ -65,7 +64,6 @@ show_help() {
     echo "  --only-system-files    Clean only OS system files"
     echo "  --only-build-files     Clean only build artifacts and cache"
     echo "  --skip-git             Don't remove files from Git tracking"
-    echo "  --skip-archives        Don't delete archive files"
     echo "  --skip-empty-dirs      Don't remove empty directories"
     echo ""
     echo "CUSTOM OPTIONS:"
@@ -77,7 +75,7 @@ show_help() {
     echo "EXAMPLES:"
     echo "  ./remove-project-junk.sh --dry-run"
     echo "  ./remove-project-junk.sh --only-system-files"
-    echo "  ./remove-project-junk.sh --force --skip-archives"
+    echo "  ./remove-project-junk.sh --force --skip-git"
     echo ""
     echo "WHAT IT CLEANS:"
     echo -e "  ${GREEN}✓${NC} Linux: *~, .nfs*, .Trash-*"
@@ -88,6 +86,8 @@ show_help() {
     echo -e "  ${GREEN}✓${NC} Logs: *.log, npm-debug.log*"
     echo -e "  ${GREEN}✓${NC} Backups: *.bak, *.swp, *.tmp"
     echo -e "  ${GREEN}✓${NC} Empty directories"
+    echo ""
+    echo -e "  ${YELLOW}NOTE:${NC} Archive files (.zip, .rar, .7z, etc.) are never touched."
     echo ""
     echo "Make executable: chmod +x remove-project-junk.sh"
 }
@@ -113,10 +113,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-git)
             SKIP_GIT=true
-            shift
-            ;;
-        --skip-archives)
-            SKIP_ARCHIVES=true
             shift
             ;;
         --only-system-files)
@@ -206,7 +202,6 @@ if [[ "$QUIET" == false ]]; then
     [[ "$ONLY_SYSTEM_FILES" == true ]] && options+=("OnlySystemFiles")
     [[ "$ONLY_BUILD_FILES" == true ]] && options+=("OnlyBuildFiles")
     [[ "$SKIP_GIT" == true ]] && options+=("SkipGit")
-    [[ "$SKIP_ARCHIVES" == true ]] && options+=("SkipArchives")
     
     if [[ ${#options[@]} -gt 0 ]]; then
         IFS=', '
@@ -462,24 +457,6 @@ if [[ "$ONLY_SYSTEM_FILES" == false ]]; then
     
     if show_and_prompt "Compiled Files" "files" "${compiled_files[@]}"; then
         delete_items "file" "${compiled_files[@]}"
-    fi
-fi
-
-# Handle archive files
-if [[ "$ONLY_SYSTEM_FILES" == false && "$SKIP_ARCHIVES" == false ]]; then
-    archive_files=()
-    archive_extensions=("*.zip" "*.rar" "*.7z" "*.tar" "*.gz" "*.bz2" "*.xz")
-    
-    for ext in "${archive_extensions[@]}"; do
-        while IFS= read -r -d '' file; do
-            if [[ -f "$file" ]]; then
-                archive_files+=("$file")
-            fi
-        done < <(find "$TARGET_PATH" -name "$ext" -type f -print0 2>/dev/null)
-    done
-    
-    if show_and_prompt "Archive Files" "files" "${archive_files[@]}"; then
-        delete_items "file" "${archive_files[@]}"
     fi
 fi
 

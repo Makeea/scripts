@@ -58,8 +58,9 @@ A comprehensive and potentially destructive project cleanup script for Windows t
 - **Log Files**: `*.log`, `npm-debug.log*`, `yarn-debug.log*`
 - **Backup Files**: `*.bak`, `*.swp`, `*.tmp`, `*.old`
 - **Compiled Files**: `*.pyc`, `*.class`, `*.o`, `*.obj`
-- **Archive Files**: `*.zip`, `*.rar`, `*.7z` (with confirmation)
 - **Empty Directories**: Recursively removes empty folders
+
+> Archive files (`.zip`, `.rar`, `.7z`, etc.) are never touched by these scripts.
 
 ### 🛡️ Safety Features
 
@@ -77,9 +78,6 @@ A comprehensive and potentially destructive project cleanup script for Windows t
 
 # Clean only build artifacts and cache
 .\Remove-ProjectJunk.ps1 -OnlyBuildFiles
-
-# Skip archive files (keep .zip, .rar, etc.)
-.\Remove-ProjectJunk.ps1 -SkipArchives
 
 # Don't remove from Git tracking
 .\Remove-ProjectJunk.ps1 -SkipGit

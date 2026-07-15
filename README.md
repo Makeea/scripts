@@ -9,6 +9,7 @@ This repo is a personal toolbox of scripts designed to make everyday technical t
 
 - `linux/` – Shell scripts for Linux systems, including Docker, Git, Proxmox, backups, and desktop setups.
 - `batch/` – Windows `.bat` scripts for silent installs, file handling, and printer queue fixes.
+- `junk-cleanup/` – Recursively sends OS junk files (macOS/Windows/Linux) to the Recycle Bin/trash; PowerShell, Bash, and self-contained `.cmd` versions.
 - `pihole.md` – Setup notes and tweaks for Pi-hole network ad blocking.
 
 ---
