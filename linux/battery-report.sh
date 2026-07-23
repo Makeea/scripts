@@ -9,6 +9,7 @@
 set -euo pipefail
 
 REPORT_DIR="/var/reports"
+HISTORY_HEADER="Date,DesignCapacity,FullChargeCapacity,Unit,HealthPercent,Condition,CycleCount,Voltage_uV,Current_uA,Status,Device"
 
 fail() {
     printf 'ERROR: %s\n' "$1" >&2
@@ -62,11 +63,21 @@ main() {
     cycle_count="$(read_attr "$bat_path/cycle_count")"
     model="$(read_attr "$bat_path/model_name")"
 
+    # Extra hardware-level detail, all read live from the battery's own fuel-gauge
+    # chip via the kernel's power_supply sysfs interface, not from any OS history --
+    # this data survives a fresh OS install since it lives on the battery itself.
+    local manufacturer serial voltage_now current_now device_id
+    manufacturer="$(read_attr "$bat_path/manufacturer")"
+    serial="$(read_attr "$bat_path/serial_number")"
+    voltage_now="$(read_attr "$bat_path/voltage_now")"
+    current_now="$(read_attr "$bat_path/current_now")"
+    device_id="$(printf '%s %s %s' "$manufacturer" "$model" "$serial" | sed 's/^ *//;s/ *$//;s/  */ /g')"
+
     # Save the raw diagnostic dump as the detailed report
     {
         echo "Battery Report - $timestamp"
         echo "Device: $bat_path"
-        [[ -n "$model" ]] && echo "Model: $model"
+        [[ -n "$device_id" ]] && echo "Identification: $device_id"
         echo "Status: $status"
         echo "Current Charge: ${charge_percent}%"
         echo
@@ -96,15 +107,25 @@ main() {
 
     echo
     echo "Battery Health Summary"
-    echo "  Design Capacity:      $design $unit"
-    echo "  Full Charge Capacity: $full $unit"
-    [[ -n "$cycle_count" && "$cycle_count" != "0" ]] && echo "  Cycle Count:          $cycle_count"
-    echo "  Health:               ${health_percent}% - $condition"
+    [[ -n "$device_id" ]] && echo "  Device:                $device_id"
+    echo "  Design Capacity:       $design $unit"
+    echo "  Full Charge Capacity:  $full $unit"
+    echo "  Health:                ${health_percent}% - $condition"
+    [[ -n "$cycle_count" && "$cycle_count" != "0" ]] && echo "  Cycle Count:           $cycle_count"
+    [[ -n "$voltage_now" ]] && echo "  Voltage:               $voltage_now uV"
+    [[ -n "$current_now" ]] && echo "  Current:               $current_now uA"
+    echo "  Status:                $status"
 
-    if [[ ! -f "$history_path" ]]; then
-        echo "Date,DesignCapacity,FullChargeCapacity,Unit,HealthPercent,Condition" > "$history_path"
+    if [[ -f "$history_path" ]] && [[ "$(head -n1 "$history_path")" != "$HISTORY_HEADER" ]]; then
+        # Older history file used a smaller column set -- keep it instead of silently breaking the CSV shape
+        mv "$history_path" "$REPORT_DIR/battery-health-history-$timestamp.csv.bak"
     fi
-    printf '%s,%s,%s,%s,%s,%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$design" "$full" "$unit" "$health_percent" "$condition" >> "$history_path"
+    if [[ ! -f "$history_path" ]]; then
+        echo "$HISTORY_HEADER" > "$history_path"
+    fi
+    printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+        "$(date '+%Y-%m-%d %H:%M:%S')" "$design" "$full" "$unit" "$health_percent" "$condition" \
+        "$cycle_count" "$voltage_now" "$current_now" "$status" "$device_id" >> "$history_path"
 }
 
 main "$@"

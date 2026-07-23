@@ -9,10 +9,16 @@
 set -euo pipefail
 
 REPORT_DIR="/var/reports"
+HISTORY_HEADER="Date,MaxCapacityPercent,CycleCount,AppleCondition,HealthRating,FullChargeCapacity_mAh,Voltage_mV,Amperage_mA,Charging,FullyCharged,Device"
 
 fail() {
     printf 'ERROR: %s\n' "$1" >&2
     exit 1
+}
+
+field() {
+    # Extracts the value after "Label: " for the first matching line
+    grep -m1 "$1" <<< "$2" | awk -F': ' '{print $2}' | sed 's/^ *//;s/ *$//'
 }
 
 main() {
@@ -36,9 +42,23 @@ main() {
 
     # macOS already computes battery health itself; pull its own fields rather than recalculating
     local max_capacity cycle_count apple_condition
-    max_capacity="$(grep -m1 "Maximum Capacity" <<< "$profiler_output" | awk -F': ' '{print $2}' | tr -d '%[:space:]')"
-    cycle_count="$(grep -m1 "Cycle Count" <<< "$profiler_output" | awk -F': ' '{print $2}' | tr -d '[:space:]')"
-    apple_condition="$(grep -m1 "Condition" <<< "$profiler_output" | awk -F': ' '{print $2}' | sed 's/^ *//;s/ *$//')"
+    max_capacity="$(field "Maximum Capacity" "$profiler_output" | tr -d '%')"
+    cycle_count="$(field "Cycle Count" "$profiler_output")"
+    apple_condition="$(field "Condition" "$profiler_output")"
+
+    # Extra hardware-level detail, all read live from the battery's own controller
+    # via system_profiler/IOKit, not from any OS history -- this data survives a
+    # fresh macOS install since it lives on the battery itself.
+    local serial manufacturer device_name full_charge_mah voltage_mv amperage_ma charging fully_charged device_id
+    serial="$(field "Serial Number" "$profiler_output")"
+    manufacturer="$(field "Manufacturer" "$profiler_output")"
+    device_name="$(field "Device Name" "$profiler_output")"
+    full_charge_mah="$(field "Full Charge Capacity" "$profiler_output")"
+    voltage_mv="$(field "Voltage (mV)" "$profiler_output")"
+    amperage_ma="$(field "Amperage (mA)" "$profiler_output")"
+    charging="$(field "Charging:" "$profiler_output")"
+    fully_charged="$(field "Fully Charged" "$profiler_output")"
+    device_id="$(printf '%s %s %s' "$manufacturer" "$device_name" "$serial" | sed 's/^ *//;s/ *$//;s/  */ /g')"
 
     if [[ -z "$max_capacity" ]]; then
         echo "Could not determine battery health percentage (Maximum Capacity not reported)."
@@ -58,15 +78,27 @@ main() {
 
     echo
     echo "Battery Health Summary"
-    echo "  Maximum Capacity:  ${max_capacity}%"
-    [[ -n "$cycle_count" ]] && echo "  Cycle Count:       $cycle_count"
-    [[ -n "$apple_condition" ]] && echo "  Apple Condition:   $apple_condition"
-    echo "  Health Rating:     ${max_capacity}% - $condition"
+    [[ -n "$device_id" ]] && echo "  Device:               $device_id"
+    echo "  Maximum Capacity:     ${max_capacity}%"
+    [[ -n "$cycle_count" ]] && echo "  Cycle Count:          $cycle_count"
+    [[ -n "$apple_condition" ]] && echo "  Apple Condition:      $apple_condition"
+    echo "  Health Rating:        ${max_capacity}% - $condition"
+    [[ -n "$full_charge_mah" ]] && echo "  Full Charge Capacity: $full_charge_mah mAh"
+    [[ -n "$voltage_mv" ]] && echo "  Voltage:              $voltage_mv mV"
+    [[ -n "$amperage_ma" ]] && echo "  Amperage:             $amperage_ma mA"
+    [[ -n "$charging" ]] && echo "  Charging:             $charging"
+    [[ -n "$fully_charged" ]] && echo "  Fully Charged:        $fully_charged"
 
-    if [[ ! -f "$history_path" ]]; then
-        echo "Date,MaxCapacityPercent,CycleCount,AppleCondition,HealthRating" > "$history_path"
+    if [[ -f "$history_path" ]] && [[ "$(head -n1 "$history_path")" != "$HISTORY_HEADER" ]]; then
+        # Older history file used a smaller column set -- keep it instead of silently breaking the CSV shape
+        mv "$history_path" "$REPORT_DIR/battery-health-history-$timestamp.csv.bak"
     fi
-    printf '%s,%s,%s,%s,%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$max_capacity" "$cycle_count" "$apple_condition" "$condition" >> "$history_path"
+    if [[ ! -f "$history_path" ]]; then
+        echo "$HISTORY_HEADER" > "$history_path"
+    fi
+    printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+        "$(date '+%Y-%m-%d %H:%M:%S')" "$max_capacity" "$cycle_count" "$apple_condition" "$condition" \
+        "$full_charge_mah" "$voltage_mv" "$amperage_ma" "$charging" "$fully_charged" "$device_id" >> "$history_path"
 }
 
 main "$@"
