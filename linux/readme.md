@@ -24,6 +24,7 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/scriptn
 
 ## 📂 Scripts and What They Do
 
+- `battery-report.sh` – Checks battery health (design vs. full charge capacity), rates its condition, and saves a report plus history CSV to `/var/reports`.
 - `chrome.sh` – Installs the Google Chrome web browser.
 - `docker.sh` – Installs Docker Engine and Docker Compose.
 - `docker_compose_v1.29.2.sh` – Installs Docker Compose version 1.29.2.

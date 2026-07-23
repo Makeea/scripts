@@ -151,6 +151,59 @@ irm https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/powershel
 
 ---
 
+### 🔋 Check Linux Battery Health
+
+This script checks a Linux laptop's battery condition and saves a battery health report.
+
+📄 **Script link:**  
+https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/battery-report.sh
+
+▶️ **Run it:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/battery-report.sh | bash
+```
+
+**What it does:**
+
+- Reads battery capacity data from `/sys/class/power_supply` and skips gracefully on battery-less systems (desktops/servers)
+- Calculates battery health % (full charge capacity vs. design capacity) with a plain-language condition rating (Good / Fair / Poor / Very Poor)
+- Saves a battery report to `/var/reports/battery-report-<timestamp>.txt`
+- Appends each run's health summary to `/var/reports/battery-health-history.csv` so degradation can be tracked over time
+
+**Good to know:**
+
+- Health rating uses the same rule of thumb as the Windows version: capacity retention below ~80% is when noticeable battery degradation typically starts
+- If `/var/reports` doesn't already exist and can't be created without elevated permissions, run with `sudo`
+
+---
+
+### 🔋 Check macOS Battery Health
+
+This script checks a MacBook's battery condition and saves a battery health report.
+
+📄 **Script link:**  
+https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/macos/battery-report.sh
+
+▶️ **Run it:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/macos/battery-report.sh | bash
+```
+
+**What it does:**
+
+- Reads battery health data from `system_profiler` (Apple's own Cycle Count, Condition, and Maximum Capacity) and skips gracefully on desktop Macs
+- Applies the same Good / Fair / Poor / Very Poor rating as the Windows and Linux versions, shown alongside Apple's own Condition label
+- Saves the full battery report to `/var/reports/battery-report-<timestamp>.txt`
+- Appends each run's health summary to `/var/reports/battery-health-history.csv` so degradation can be tracked over time
+
+**Good to know:**
+
+- If `/var/reports` doesn't already exist and can't be created without elevated permissions, run with `sudo`
+
+---
+
 ## 🧰 Featured Scripts
 
 | Script | Description |
@@ -163,6 +216,8 @@ irm https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/powershel
 | `batch/Clear Print Queue.bat` | Clears printer queue on Windows systems |
 | `linux/rsync_backup.sh` | Automates backup using rsync |
 | `powershell/Get-BatteryReport.ps1` | Checks Windows battery health/condition and saves a report to `C:\reports` |
+| `linux/battery-report.sh` | Checks Linux battery health/condition and saves a report to `/var/reports` |
+| `macos/battery-report.sh` | Checks macOS battery health/condition and saves a report to `/var/reports` |
 
 ---
 
