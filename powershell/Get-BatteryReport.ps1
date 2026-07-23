@@ -38,15 +38,15 @@
 # 1. Confirm this machine has a battery before doing anything else
 $battery = Get-CimInstance -ClassName Win32_Battery -ErrorAction SilentlyContinue
 if (-not $battery) {
-	Write-Host "No battery detected on this system (likely a desktop). Skipping battery report."
-	exit 0
+    Write-Host "No battery detected on this system (likely a desktop). Skipping battery report."
+    exit 0
 }
 
 # 2. Ensure report directory exists
 #    Creates C:\reports if it doesn't already exist
 $report_dir = "C:\reports"
 if (!(Test-Path $report_dir)) {
-	New-Item -ItemType Directory -Path $report_dir | Out-Null
+    New-Item -ItemType Directory -Path $report_dir | Out-Null
 }
 
 # 3. Build timestamped report path
@@ -57,14 +57,14 @@ $report_path = "$report_dir\battery-report-$timestamp.html"
 #    powercfg /batteryreport is the built-in Windows tool for battery health:
 #    design capacity vs. full charge capacity, charge/discharge history, and life estimates
 try {
-	powercfg /batteryreport /output "$report_path" | Out-Null
-	if (Test-Path $report_path) {
-		Write-Host "Battery report saved to $report_path"
-	} else {
-		Write-Host "ERROR: powercfg did not produce a report file." -ForegroundColor Red
-	}
+    powercfg /batteryreport /output "$report_path" | Out-Null
+    if (Test-Path $report_path) {
+        Write-Host "Battery report saved to $report_path"
+    } else {
+        Write-Host "ERROR: powercfg did not produce a report file." -ForegroundColor Red
+    }
 } catch {
-	Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
 }
 
 # 5. Battery health percentage (Full Charge Capacity vs. Design Capacity)
@@ -73,48 +73,85 @@ try {
 #    degradation/replacement conversations typically start. Not a hard law,
 #    just the most consistently cited threshold.
 try {
-	try {
-		$staticData = Get-CimInstance -Namespace root\wmi -ClassName BatteryStaticData -ErrorAction Stop
-	} catch {
-		# Some systems throw a generic CIM driver error on this class; the older WMI provider still works
-		$staticData = Get-WmiObject -Namespace root\wmi -Class BatteryStaticData
-	}
-	$fullChargeData = Get-CimInstance -Namespace root\wmi -ClassName BatteryFullChargedCapacity
+    try {
+        $staticData = Get-CimInstance -Namespace root\wmi -ClassName BatteryStaticData -ErrorAction Stop
+    } catch {
+        # Some systems throw a generic CIM driver error on this class; the older WMI provider still works
+        $staticData = Get-WmiObject -Namespace root\wmi -Class BatteryStaticData
+    }
+    $fullChargeData = Get-CimInstance -Namespace root\wmi -ClassName BatteryFullChargedCapacity
 
-	$designCapacity = ($staticData | Select-Object -First 1).DesignedCapacity
-	$fullChargeCapacity = ($fullChargeData | Select-Object -First 1).FullChargedCapacity
+    $designCapacity = ($staticData | Select-Object -First 1).DesignedCapacity
+    $fullChargeCapacity = ($fullChargeData | Select-Object -First 1).FullChargedCapacity
 
-	if ($designCapacity -and $fullChargeCapacity) {
-		$healthPercent = [math]::Round(($fullChargeCapacity / $designCapacity) * 100, 1)
+    # Extra hardware-level detail, all read live from the battery's own controller
+    # (embedded controller / fuel gauge via ACPI), not from Windows history --
+    # this data survives a Windows reinstall since it lives on the battery itself.
+    $deviceId = ($battery | Select-Object -First 1).DeviceID
 
-		if ($healthPercent -ge 80) {
-			$condition = "Good"
-		} elseif ($healthPercent -ge 60) {
-			$condition = "Fair (noticeable wear)"
-		} elseif ($healthPercent -ge 40) {
-			$condition = "Poor (replacement recommended)"
-		} else {
-			$condition = "Very Poor (replace battery)"
-		}
+    try {
+        $cycleData = Get-CimInstance -Namespace root\wmi -ClassName BatteryCycleCount -ErrorAction Stop
+    } catch {
+        $cycleData = Get-WmiObject -Namespace root\wmi -Class BatteryCycleCount -ErrorAction SilentlyContinue
+    }
+    $cycleCount = ($cycleData | Select-Object -First 1).CycleCount
 
-		Write-Host ""
-		Write-Host "Battery Health Summary"
-		Write-Host "  Design Capacity:      $designCapacity mWh"
-		Write-Host "  Full Charge Capacity: $fullChargeCapacity mWh"
-		Write-Host "  Health:               $healthPercent% - $condition"
+    $statusData = Get-CimInstance -Namespace root\wmi -ClassName BatteryStatus -ErrorAction SilentlyContinue | Select-Object -First 1
+    $voltage = $statusData.Voltage
+    $chargeRate = $statusData.ChargeRate
+    $dischargeRate = $statusData.DischargeRate
+    $remainingCapacity = $statusData.RemainingCapacity
+    $batteryState = if ($statusData.Critical) { "Critical" } elseif ($statusData.Charging) { "Charging" } elseif ($statusData.Discharging) { "Discharging" } else { "Idle" }
 
-		# Append to a running history file so health can be tracked over time
-		$history_path = "$report_dir\battery-health-history.csv"
-		[PSCustomObject]@{
-			Date                   = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-			DesignCapacity_mWh     = $designCapacity
-			FullChargeCapacity_mWh = $fullChargeCapacity
-			HealthPercent          = $healthPercent
-			Condition              = $condition
-		} | Export-Csv -Path $history_path -Append -NoTypeInformation -Force
-	} else {
-		Write-Host "Could not determine battery health percentage (capacity data unavailable)." -ForegroundColor Yellow
-	}
+    if ($designCapacity -and $fullChargeCapacity) {
+        $healthPercent = [math]::Round(($fullChargeCapacity / $designCapacity) * 100, 1)
+
+        if ($healthPercent -ge 80) {
+            $condition = "Good"
+        } elseif ($healthPercent -ge 60) {
+            $condition = "Fair (noticeable wear)"
+        } elseif ($healthPercent -ge 40) {
+            $condition = "Poor (replacement recommended)"
+        } else {
+            $condition = "Very Poor (replace battery)"
+        }
+
+        Write-Host ""
+        Write-Host "Battery Health Summary"
+        if ($deviceId) { Write-Host "  Device:                $deviceId" }
+        Write-Host "  Design Capacity:       $designCapacity mWh"
+        Write-Host "  Full Charge Capacity:  $fullChargeCapacity mWh"
+        Write-Host "  Health:                $healthPercent% - $condition"
+        if ($cycleCount) { Write-Host "  Cycle Count:           $cycleCount" }
+        if ($voltage) { Write-Host "  Voltage:               $voltage mV" }
+        if ($remainingCapacity) { Write-Host "  Remaining Capacity:    $remainingCapacity mWh" }
+        if ($chargeRate -or $dischargeRate) { Write-Host "  Charge/Discharge Rate: $chargeRate / $dischargeRate mW" }
+        Write-Host "  State:                 $batteryState"
+
+        # Append to a running history file so health can be tracked over time
+        $history_path = "$report_dir\battery-health-history.csv"
+        $expectedHeader = '"Date","DesignCapacity_mWh","FullChargeCapacity_mWh","HealthPercent","Condition","CycleCount","Voltage_mV","ChargeRate_mW","DischargeRate_mW","RemainingCapacity_mWh","State","DeviceId"'
+        if ((Test-Path $history_path) -and ((Get-Content $history_path -TotalCount 1) -ne $expectedHeader)) {
+            # Older history file used a smaller column set -- keep it instead of silently breaking the CSV shape
+            Rename-Item -Path $history_path -NewName "battery-health-history-$timestamp.csv.bak"
+        }
+        [PSCustomObject]@{
+            Date                   = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+            DesignCapacity_mWh     = $designCapacity
+            FullChargeCapacity_mWh = $fullChargeCapacity
+            HealthPercent          = $healthPercent
+            Condition              = $condition
+            CycleCount             = $cycleCount
+            Voltage_mV             = $voltage
+            ChargeRate_mW          = $chargeRate
+            DischargeRate_mW       = $dischargeRate
+            RemainingCapacity_mWh  = $remainingCapacity
+            State                  = $batteryState
+            DeviceId               = $deviceId
+        } | Export-Csv -Path $history_path -Append -NoTypeInformation -Force
+    } else {
+        Write-Host "Could not determine battery health percentage (capacity data unavailable)." -ForegroundColor Yellow
+    }
 } catch {
-	Write-Host "Could not determine battery health percentage: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "Could not determine battery health percentage: $($_.Exception.Message)" -ForegroundColor Yellow
 }
