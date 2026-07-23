@@ -21,6 +21,7 @@ Set-ExecutionPolicy RemoteSigned -Scope Process
 - `Uptime.ps1` – Displays details about the operating system.
 - `backup-or-restore-all-drivers.ps1` – General system info or data extraction script.
 - `backup-userdata-wsl-apps.ps1` – General system info or data extraction script.
+- `Get-BatteryReport.ps1` – Checks battery health (design vs. full charge capacity), rates its condition, and saves a report plus history CSV to `C:\reports`.
 - `get windows key.ps1` – Lists installed programs using WMI or CIM.
 - `get-hostname.ps1` – General system info or data extraction script.
 - `get-wifi-passwords.ps1` – General system info or data extraction script.

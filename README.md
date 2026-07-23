@@ -124,6 +124,33 @@ ssh-import-id-gh <username>
 
 ---
 
+### 🔋 Check Windows Battery Health
+
+This script checks a Windows laptop's battery condition and saves a battery health report.
+
+📄 **Script link:**  
+https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/powershell/Get-BatteryReport.ps1
+
+▶️ **Run it:**
+
+```powershell
+irm https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/powershell/Get-BatteryReport.ps1 | iex
+```
+
+**What it does:**
+
+- Detects whether the system has a battery and skips gracefully on desktops
+- Calculates battery health % (full charge capacity vs. design capacity) with a plain-language condition rating (Good / Fair / Poor / Very Poor)
+- Saves the native Windows `powercfg` battery report to `C:\reports\battery-report-<timestamp>.html`
+- Appends each run's health summary to `C:\reports\battery-health-history.csv` so degradation can be tracked over time
+
+**Good to know:**
+
+- Health rating uses a commonly cited industry rule of thumb: capacity retention below ~80% is when noticeable battery degradation typically starts
+- No administrator rights required
+
+---
+
 ## 🧰 Featured Scripts
 
 | Script | Description |
@@ -135,6 +162,7 @@ ssh-import-id-gh <username>
 | `linux/pihole-update.sh` | Update system packages on a Pi-hole host and run the Pi-hole updater |
 | `batch/Clear Print Queue.bat` | Clears printer queue on Windows systems |
 | `linux/rsync_backup.sh` | Automates backup using rsync |
+| `powershell/Get-BatteryReport.ps1` | Checks Windows battery health/condition and saves a report to `C:\reports` |
 
 ---
 
