@@ -218,7 +218,7 @@ show_summary() {
 
     case "$DISTRO_FAMILY" in
         apt)
-            apt list --upgradable 2>/dev/null || true
+            apt list --upgradable 2>/dev/null | cat || true
             ;;
         dnf)
             dnf check-update || true
