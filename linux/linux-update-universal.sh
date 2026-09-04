@@ -12,6 +12,7 @@ DISTRO_NAME=""
 PKG_MGR=""
 IS_PROXMOX=false
 REBOOT_REQUIRED=false
+REBOOT_DELAY_SECONDS=15
 
 log() {
     local message="$1"
@@ -94,6 +95,10 @@ detect_os() {
             DISTRO_FAMILY="zypper"
             PKG_MGR="zypper"
             ;;
+        alpine)
+            DISTRO_FAMILY="apk"
+            PKG_MGR="apk"
+            ;;
         *)
             if command -v apt >/dev/null 2>&1; then
                 DISTRO_FAMILY="apt"
@@ -110,6 +115,9 @@ detect_os() {
             elif command -v zypper >/dev/null 2>&1; then
                 DISTRO_FAMILY="zypper"
                 PKG_MGR="zypper"
+            elif command -v apk >/dev/null 2>&1; then
+                DISTRO_FAMILY="apk"
+                PKG_MGR="apk"
             else
                 fail "Unsupported Linux distribution: $DISTRO_NAME"
             fi
@@ -191,6 +199,17 @@ update_zypper() {
     zypper --non-interactive clean --all
 }
 
+update_apk() {
+    log "Running apk update..."
+    apk update
+
+    log "Running apk upgrade..."
+    apk upgrade
+
+    log "Running apk cache clean..."
+    apk cache clean || true
+}
+
 show_summary() {
     log "Update summary:"
     log "Distro: $DISTRO_NAME"
@@ -213,6 +232,9 @@ show_summary() {
         zypper)
             zypper list-updates || true
             ;;
+        apk)
+            apk version -l '<' || true
+            ;;
     esac
 }
 
@@ -226,7 +248,23 @@ reboot_system() {
         return
     fi
 
-    log "Update completed successfully. Rebooting now."
+    if [[ "$REBOOT_REQUIRED" != true ]]; then
+        log "Update completed successfully. No reboot is currently required."
+        return
+    fi
+
+    log "Update completed successfully. A reboot is required."
+    log "Rebooting in $REBOOT_DELAY_SECONDS seconds. Press Ctrl+C now to cancel."
+
+    local remaining="$REBOOT_DELAY_SECONDS"
+    while [[ "$remaining" -gt 0 ]]; do
+        printf '\rRebooting in %2d seconds... (Ctrl+C to cancel)' "$remaining" >&2
+        sleep 1
+        remaining=$((remaining - 1))
+    done
+    printf '\n' >&2
+
+    log "Rebooting now."
     reboot
 }
 
@@ -256,6 +294,9 @@ main() {
             ;;
         zypper)
             update_zypper
+            ;;
+        apk)
+            update_apk
             ;;
         *)
             fail "Unsupported distro family: $DISTRO_FAMILY"
