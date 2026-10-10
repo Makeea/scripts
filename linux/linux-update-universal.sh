@@ -38,6 +38,12 @@ require_root() {
     if [[ "${EUID}" -ne 0 ]]; then
         if command -v sudo >/dev/null 2>&1; then
             printf 'Root privileges required. Re-running with sudo.\n' >&2
+
+            local script_path="${BASH_SOURCE[1]:-}"
+            if [[ -f "$script_path" ]]; then
+                exec sudo bash "$script_path" "$@"
+            fi
+
             exec sudo bash -c "curl -fsSL '$SCRIPT_URL' | bash"
         fi
 
@@ -72,6 +78,10 @@ detect_os() {
     fi
 
     case "$DISTRO_ID" in
+        steamos)
+            DISTRO_FAMILY="steamos"
+            PKG_MGR="steamos-update"
+            ;;
         ubuntu|debian|linuxmint|pop|kali|raspbian)
             DISTRO_FAMILY="apt"
             PKG_MGR="apt"
@@ -139,6 +149,12 @@ detect_reboot_requirement() {
                 if needs-restarting -r >/dev/null 2>&1; then
                     REBOOT_REQUIRED=true
                 fi
+            fi
+            ;;
+        steamos)
+            if command -v atomupd-manager >/dev/null 2>&1 \
+                && [[ "$(atomupd-manager get-update-status 2>/dev/null || true)" == "successful" ]]; then
+                REBOOT_REQUIRED=true
             fi
             ;;
     esac
@@ -210,6 +226,58 @@ update_apk() {
     apk cache clean || true
 }
 
+update_steamos() {
+    command -v steamos-update >/dev/null 2>&1 \
+        || fail "SteamOS updater (steamos-update) not found."
+
+    log "Checking for SteamOS updates..."
+
+    local status=0
+    if steamos-update 2>&1 | tee -a "$LOG_FILE"; then
+        status=0
+    else
+        status=$?
+    fi
+
+    case "$status" in
+        0)
+            log "SteamOS update applied. A reboot is required to activate it."
+            ;;
+        7)
+            log "No SteamOS update available."
+            ;;
+        *)
+            return "$status"
+            ;;
+    esac
+}
+
+update_flatpak() {
+    if ! command -v flatpak >/dev/null 2>&1; then
+        log "Flatpak is not installed; skipping Flatpak updates."
+        return
+    fi
+
+    log "Checking for system Flatpak updates..."
+    flatpak update --system -y
+
+    if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != "root" ]] \
+        && command -v sudo >/dev/null 2>&1; then
+        log "Checking for Flatpak updates for user $SUDO_USER..."
+        sudo -u "$SUDO_USER" flatpak update --user -y
+    fi
+}
+
+update_snap() {
+    if ! command -v snap >/dev/null 2>&1; then
+        log "Snap is not installed; skipping Snap updates."
+        return
+    fi
+
+    log "Checking for Snap updates..."
+    snap refresh
+}
+
 show_summary() {
     log "Update summary:"
     log "Distro: $DISTRO_NAME"
@@ -235,6 +303,9 @@ show_summary() {
         apk)
             apk version -l '<' || true
             ;;
+        steamos)
+            atomupd-manager get-update-status || true
+            ;;
     esac
 }
 
@@ -254,22 +325,36 @@ reboot_system() {
     fi
 
     log "Update completed successfully. A reboot is required."
-    log "Rebooting in $REBOOT_DELAY_SECONDS seconds. Press Ctrl+C now to cancel."
+    log "Rebooting automatically unless cancelled."
 
     local remaining="$REBOOT_DELAY_SECONDS"
+    local response=""
+    local input_fd=0
+
+    if [[ -r /dev/tty ]]; then
+        exec {input_fd}<>/dev/tty
+    fi
+
     while [[ "$remaining" -gt 0 ]]; do
-        printf '\rRebooting in %2d seconds... (Ctrl+C to cancel)' "$remaining" >&2
-        sleep 1
+        printf '\rRebooting in %2d seconds... Reboot now? [Y/n] ' "$remaining" >&2
+        if read -r -t 1 -u "$input_fd" response; then
+            break
+        fi
         remaining=$((remaining - 1))
     done
     printf '\n' >&2
+
+    if [[ "${response,,}" == "n" || "${response,,}" == "no" ]]; then
+        log "Automatic reboot cancelled. Reboot manually to activate the update."
+        return
+    fi
 
     log "Rebooting now."
     reboot
 }
 
 main() {
-    require_root
+    require_root "$@"
     setup_logging
     acquire_lock
     detect_os
@@ -298,11 +383,16 @@ main() {
         apk)
             update_apk
             ;;
+        steamos)
+            update_steamos
+            ;;
         *)
             fail "Unsupported distro family: $DISTRO_FAMILY"
             ;;
     esac
 
+    update_flatpak
+    update_snap
     show_summary
     detect_reboot_requirement
     reboot_system
