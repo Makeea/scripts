@@ -60,11 +60,11 @@ usage() {
 Usage: $SCRIPT_NAME [options]
 
 Run once:
-  curl -fsSL $SCRIPT_URL | sudo bash
+  curl -fsSL $SCRIPT_URL | bash
 
 Install the weekly cron job (Sunday $DEFAULT_TIME by default):
-  curl -fsSL $SCRIPT_URL | sudo bash -s -- --install-cron
-  curl -fsSL $SCRIPT_URL | sudo bash -s -- --install-cron --time 04:00
+  curl -fsSL $SCRIPT_URL | bash -s -- --install-cron
+  curl -fsSL $SCRIPT_URL | bash -s -- --install-cron --time 04:00
 
 Options:
   --dry-run          Print the commands without running them
@@ -152,7 +152,7 @@ require_root() {
 
     if ! command -v sudo >/dev/null 2>&1; then
         echo "Root privileges required. Run as root or install sudo." >&2
-        echo "Example: curl -fsSL $SCRIPT_URL | sudo bash" >&2
+        echo "Example: curl -fsSL $SCRIPT_URL | bash" >&2
         exit 1
     fi
 

@@ -74,35 +74,88 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/scriptn
 
 ## 🗓️ Weekly Auto-Update (`server-auto-update.sh`)
 
+📄 **Script link:**  
+https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh
+
 Run it once on any server:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash
 ```
 
-Install the weekly cron job. It runs Sundays at 03:00:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh | sudo bash -s -- --install-cron
-```
-
-The two Pi-holes need different times so one stays up. Install pihole12 with the default and pihole11 with `--time 04:00`.
-
-The log lives at `~/logs/updater.log` for the user who ran `sudo`. The installer writes:
+The log lives at `~/logs/updater.log` for the user who ran it. `--install-cron` writes:
 
 - `/usr/local/sbin/server-auto-update.sh` (refreshes itself from GitHub before each run)
 - `/etc/cron.d/server-auto-update` (`/etc/crontabs/root` on Alpine)
 - `/etc/logrotate.d/server-auto-update`
 
-| Flag | What it does |
-| --- | --- |
-| `--dry-run` | Print every command without running it |
-| `--no-reboot` | Report a pending reboot instead of rebooting |
-| `--skip-os`, `--skip-pihole`, `--skip-docker`, `--skip-cleanup` | Skip one step |
-| `--log-user USER` | Log to `~USER/logs/updater.log` |
-| `--install-cron [--time HH:MM]` | Install and schedule the weekly run |
-| `--uninstall-cron` | Remove the cron job, logrotate config, and installed copy |
-| `--no-self-update` | Run the installed copy without checking GitHub |
+Run it with flags:
+
+Preview every command without changing anything:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --dry-run
+```
+
+Update everything but never reboot:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --no-reboot
+```
+
+Install the weekly cron job (Sunday 03:00):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --install-cron
+```
+
+Install the weekly cron job at another time. Use this on the second Pi-hole so DNS stays up:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --install-cron --time 04:00
+```
+
+Remove the cron job, logrotate config, and installed copy:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --uninstall-cron
+```
+
+Skip OS package updates:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --skip-os
+```
+
+Skip the Pi-hole update:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --skip-pihole
+```
+
+Skip Docker Compose updates:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --skip-docker
+```
+
+Skip Docker cleanup:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --skip-cleanup
+```
+
+Write the log to another user's home (`~USER/logs/updater.log`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --log-user USER
+```
+
+Show every flag:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --help
+```
 
 ---
 

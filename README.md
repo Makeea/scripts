@@ -74,25 +74,83 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/linux-u
 One script for every server. It checks what the host runs and updates only those parts: OS packages, Pi-hole, and running Docker Compose projects. Then it cleans up Docker and reboots if the OS asks for it.
 
 📄 **Script link:**  
-https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh
+https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh
 
-▶️ **Run it once:**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh | sudo bash
-```
-
-▶️ **Install the weekly job (Sunday 03:00):**
+▶️ **Run it:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh | sudo bash -s -- --install-cron
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash
 ```
 
-On the second Pi-hole, pick a different hour so DNS stays up on one of them:
+▶️ **Run it with flags:**
+
+Preview every command without changing anything:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh | sudo bash -s -- --install-cron --time 04:00
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --dry-run
 ```
+
+Update everything but never reboot:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --no-reboot
+```
+
+Install the weekly cron job (Sunday 03:00):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --install-cron
+```
+
+Install the weekly cron job at another time. Use this on the second Pi-hole so DNS stays up:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --install-cron --time 04:00
+```
+
+Remove the cron job, logrotate config, and installed copy:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --uninstall-cron
+```
+
+Skip OS package updates:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --skip-os
+```
+
+Skip the Pi-hole update:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --skip-pihole
+```
+
+Skip Docker Compose updates:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --skip-docker
+```
+
+Skip Docker cleanup:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --skip-cleanup
+```
+
+Write the log to another user's home (`~USER/logs/updater.log`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --log-user USER
+```
+
+Show every flag:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --help
+```
+
+You can combine flags, for example `bash -s -- --dry-run --skip-os`.
 
 **What it does:**
 
@@ -101,14 +159,14 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-
 - Finds running Compose projects from their container labels, so you never set a folder. It pulls and recreates only the services that are running now
 - Runs `docker system prune --all --force`. Volumes are never deleted
 - Reboots one minute after the run when the OS needs it. Proxmox hosts never reboot on their own
-- Logs to `~/logs/updater.log` for the user who ran `sudo` (rotated weekly, 8 copies kept)
+- Logs to `~/logs/updater.log` for the user who ran it (rotated weekly, 8 copies kept)
 
 **Good to know:**
 
-- Preview first with `--dry-run`
-- The installed copy at `/usr/local/sbin/server-auto-update.sh` pulls the newest version from GitHub before each run. If GitHub is down, it runs the copy it has
+- Run it with `bash`. The script uses `sudo` itself when needed
+- The cron job runs `/usr/local/sbin/server-auto-update.sh`, which pulls the newest version from GitHub before each run. If GitHub is down, it runs the copy it has
 - Non Pi-hole hosts wait a random 0 to 30 minutes so they don't all hit the mirrors at once
-- Remove it with `--uninstall-cron`. Run `--help` for every flag
+- A failed step doesn't stop the others. The run exits with code 1 and the log names what failed
 
 ---
 
