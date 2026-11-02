@@ -69,6 +69,49 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/linux-u
 
 ---
 
+### 🗓️ Weekly Auto-Update for Every Server
+
+One script for every server. It checks what the host runs and updates only those parts: OS packages, Pi-hole, and running Docker Compose projects. Then it cleans up Docker and reboots if the OS asks for it.
+
+📄 **Script link:**  
+https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh
+
+▶️ **Run it once:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh | sudo bash
+```
+
+▶️ **Install the weekly job (Sunday 03:00):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh | sudo bash -s -- --install-cron
+```
+
+On the second Pi-hole, pick a different hour so DNS stays up on one of them:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh | sudo bash -s -- --install-cron --time 04:00
+```
+
+**What it does:**
+
+- Updates OS packages with `apt`, `dnf`, `yum`, `pacman`, `zypper`, `apk`, or SteamOS, plus Flatpak and Snap
+- Runs `pihole -up` when Pi-hole is installed, then checks that `pihole-FTL` is running
+- Finds running Compose projects from their container labels, so you never set a folder. It pulls and recreates only the services that are running now
+- Runs `docker system prune --all --force`. Volumes are never deleted
+- Reboots one minute after the run when the OS needs it. Proxmox hosts never reboot on their own
+- Logs to `~/logs/updater.log` for the user who ran `sudo` (rotated weekly, 8 copies kept)
+
+**Good to know:**
+
+- Preview first with `--dry-run`
+- The installed copy at `/usr/local/sbin/server-auto-update.sh` pulls the newest version from GitHub before each run. If GitHub is down, it runs the copy it has
+- Non Pi-hole hosts wait a random 0 to 30 minutes so they don't all hit the mirrors at once
+- Remove it with `--uninstall-cron`. Run `--help` for every flag
+
+---
+
 ### 🟦 Update a Pi-hole Server
 
 This updater refreshes Debian or Ubuntu packages on a Pi-hole host and then runs the Pi-hole updater.

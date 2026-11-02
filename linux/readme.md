@@ -57,6 +57,7 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/scriptn
 - `server-post-install.sh` – Basic post-install setup for newly built servers.
 - `server-staging.sh` – Prepares a Linux server for use as a staging environment.
 - `server-update.sh` – Runs system updates and cleanup tasks.
+- `server-auto-update.sh` – Weekly unattended updater. Detects the host and updates OS packages, Pi-hole, and running Docker Compose projects, prunes Docker (never volumes), and reboots when needed (never on Proxmox). Installs its own cron job.
 - `linux-update-universal.sh` – Detects the Linux distro, installs package updates with the native package manager, performs cleanup, auto-reboots on non-Proxmox systems, and reports when Proxmox should be rebooted.
 - `setup_vnc.sh` – Installs and configures a VNC remote desktop server.
 - `setup_xrdp.sh` – Installs xRDP and configures desktop access via RDP.
@@ -68,6 +69,40 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/scriptn
 - `unifi-update.sh` – Updates the UniFi Controller to the latest supported version.
 - `unity-control-center-fix.sh` – Fixes issues with Unity Control Center not launching.
 - `useful-desktop-tools.sh` – Installs common GUI tools like GParted and Synaptic.
+
+---
+
+## 🗓️ Weekly Auto-Update (`server-auto-update.sh`)
+
+Run it once on any server:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh | sudo bash
+```
+
+Install the weekly cron job. It runs Sundays at 03:00:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/master/linux/server-auto-update.sh | sudo bash -s -- --install-cron
+```
+
+The two Pi-holes need different times so one stays up. Install pihole12 with the default and pihole11 with `--time 04:00`.
+
+The log lives at `~/logs/updater.log` for the user who ran `sudo`. The installer writes:
+
+- `/usr/local/sbin/server-auto-update.sh` (refreshes itself from GitHub before each run)
+- `/etc/cron.d/server-auto-update` (`/etc/crontabs/root` on Alpine)
+- `/etc/logrotate.d/server-auto-update`
+
+| Flag | What it does |
+| --- | --- |
+| `--dry-run` | Print every command without running it |
+| `--no-reboot` | Report a pending reboot instead of rebooting |
+| `--skip-os`, `--skip-pihole`, `--skip-docker`, `--skip-cleanup` | Skip one step |
+| `--log-user USER` | Log to `~USER/logs/updater.log` |
+| `--install-cron [--time HH:MM]` | Install and schedule the weekly run |
+| `--uninstall-cron` | Remove the cron job, logrotate config, and installed copy |
+| `--no-self-update` | Run the installed copy without checking GitHub |
 
 ---
 
