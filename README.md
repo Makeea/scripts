@@ -7,7 +7,7 @@ This repo is a personal toolbox of scripts designed to make everyday technical t
 
 ## 📂 What's Inside?
 
-- `linux/` – Shell scripts for Linux systems, including Docker, Git, Proxmox, backups, and desktop setups.
+- [`linux/`](linux/readme.md) – Shell scripts for Linux systems, including Docker, Git, Proxmox, backups, and desktop setups. See the [Linux scripts readme](linux/readme.md) for the full list.
 - `batch/` – Windows `.bat` scripts for silent installs, file handling, and printer queue fixes.
 - `junk-cleanup/` – Recursively sends OS junk files (macOS/Windows/Linux) to the Recycle Bin/trash; PowerShell, Bash, and self-contained `.cmd` versions.
 - `pihole.md` – Setup notes and tweaks for Pi-hole network ad blocking.
@@ -151,6 +151,8 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/li
 ```
 
 You can combine flags, for example `bash -s -- --dry-run --skip-os`.
+
+📘 **Full docs:** [linux/readme.md](linux/readme.md) lists the files the install writes and every flag.
 
 **What it does:**
 
@@ -314,6 +316,7 @@ curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/ma
 | `linux/git-Ed25519-setup.sh` | Secure SSH key generator for GitHub access |
 | `linux/linux-update-universal.sh` | Cross-distro Linux updater with logging, cleanup, and Proxmox-safe reboot handling |
 | `linux/pihole-update.sh` | Update system packages on a Pi-hole host and run the Pi-hole updater |
+| `linux/server-auto-update.sh` | Weekly unattended updater for OS packages, Pi-hole, and Docker Compose, with its own cron install |
 | `batch/Clear Print Queue.bat` | Clears printer queue on Windows systems |
 | `linux/rsync_backup.sh` | Automates backup using rsync |
 | `powershell/Get-BatteryReport.ps1` | Checks Windows battery health/condition and saves a report to `C:\reports` |
