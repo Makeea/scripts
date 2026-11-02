@@ -145,8 +145,9 @@ detect_reboot_requirement() {
 
     case "$DISTRO_FAMILY" in
         dnf|yum)
+            # needs-restarting -r exits 1 when a reboot is required.
             if command -v needs-restarting >/dev/null 2>&1; then
-                if needs-restarting -r >/dev/null 2>&1; then
+                if ! needs-restarting -r >/dev/null 2>&1; then
                     REBOOT_REQUIRED=true
                 fi
             fi

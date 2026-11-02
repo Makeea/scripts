@@ -69,7 +69,8 @@ case "$DISTRO" in
 esac
 
 # Reboot logic
-if [[ -f "$REBOOT_FLAG" ]] || needs-restarting -r >/dev/null 2>&1; then
+# needs-restarting -r exits 1 when a reboot is required.
+if [[ -f "$REBOOT_FLAG" ]] || { command -v needs-restarting >/dev/null 2>&1 && ! needs-restarting -r >/dev/null 2>&1; }; then
   echo "Reboot required — rebooting now" | tee -a "$LOGFILE"
   reboot
 else

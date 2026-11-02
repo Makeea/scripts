@@ -136,7 +136,8 @@ needs_reboot=false
 if [[ -f /var/run/reboot-required ]]; then
   needs_reboot=true
 elif command -v needs-restarting >/dev/null 2>&1; then
-  if needs-restarting -r >/dev/null 2>&1; then
+  # needs-restarting -r exits 1 when a reboot is required.
+  if ! needs-restarting -r >/dev/null 2>&1; then
     needs_reboot=true
   fi
 fi
