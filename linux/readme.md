@@ -103,7 +103,7 @@ Update everything but never reboot:
 curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --no-reboot
 ```
 
-Install the weekly cron job (Sunday 03:00):
+Install the weekly cron job. Each server picks a random Sunday time from 02:00 to 05:00, so they never all update at once. Pi-hole hosts use 03:00:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Makeea/scripts/refs/heads/master/linux/server-auto-update.sh | bash -s -- --install-cron

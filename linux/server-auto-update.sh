@@ -20,7 +20,9 @@ LOGROTATE_FILE="/etc/logrotate.d/server-auto-update"
 LOCK_FILE="/run/server-auto-update.lock"
 [[ -d /run ]] || LOCK_FILE="/var/run/server-auto-update.lock"
 
-DEFAULT_TIME="03:00"
+PIHOLE_DEFAULT_TIME="03:00"
+RANDOM_START_MINUTE=120
+RANDOM_END_MINUTE=300
 JITTER_MAX_SECONDS=1800
 REBOOT_DELAY_MINUTES=1
 
@@ -33,7 +35,7 @@ SKIP_CLEANUP=false
 NO_SELF_UPDATE=false
 CRON_MODE=false
 ACTION="run"
-CRON_TIME="$DEFAULT_TIME"
+CRON_TIME=""
 LOG_USER=""
 LOG_HOME=""
 LOG_FILE=""
@@ -62,7 +64,7 @@ Usage: $SCRIPT_NAME [options]
 Run once:
   curl -fsSL $SCRIPT_URL | bash
 
-Install the weekly cron job (Sunday $DEFAULT_TIME by default):
+Install the weekly cron job (Sunday, random time from 02:00 to 05:00):
   curl -fsSL $SCRIPT_URL | bash -s -- --install-cron
   curl -fsSL $SCRIPT_URL | bash -s -- --install-cron --time 04:00
 
@@ -75,10 +77,12 @@ Options:
   --skip-cleanup     Skip Docker cleanup
   --log-user USER    Write the log to ~USER/logs/updater.log (default: the sudo user)
   --install-cron     Install to $INSTALL_PATH and schedule a weekly run
-  --time HH:MM       Time of day for --install-cron (default: $DEFAULT_TIME, Sunday)
+  --time HH:MM       Time of day for --install-cron (default: random from 02:00 to 05:00,
+                     or $PIHOLE_DEFAULT_TIME on Pi-hole hosts)
   --uninstall-cron   Remove the cron job, logrotate config, and installed copy
   --no-self-update   Do not fetch the latest version from GitHub before running
-  --cron             Used by the cron job. Adds a random start delay on non Pi-hole hosts
+  --cron             Adds a random 0 to 30 minute start delay on non Pi-hole hosts.
+                     Older installs use it. New installs pick a random time instead
   -h, --help         Show this help
 EOF
 }
@@ -678,8 +682,27 @@ EOF
     log "Wrote $LOGROTATE_FILE"
 }
 
+# Pick a random minute in the window, so servers installed with the default spread out.
+# Pi-hole hosts get a fixed time instead, because two random picks could overlap.
+pick_cron_time() {
+    local offset
+
+    if command -v pihole >/dev/null 2>&1; then
+        CRON_TIME="$PIHOLE_DEFAULT_TIME"
+        log "Pi-hole found. Using $PIHOLE_DEFAULT_TIME. Install the other Pi-hole with --time 04:00 so they never update together."
+        return
+    fi
+
+    offset=$((RANDOM % (RANDOM_END_MINUTE - RANDOM_START_MINUTE + 1)))
+    offset=$((RANDOM_START_MINUTE + offset))
+    CRON_TIME="$(printf '%02d:%02d' $((offset / 60)) $((offset % 60)))"
+    log "Picked random time $CRON_TIME (window 02:00 to 05:00)."
+}
+
 install_cron() {
     local hour minute self_path
+
+    [[ -z "$CRON_TIME" ]] && pick_cron_time
 
     if [[ ! "$CRON_TIME" =~ ^([01]?[0-9]|2[0-3]):([0-5][0-9])$ ]]; then
         fail "Invalid --time '$CRON_TIME'. Use HH:MM, for example 04:00."
@@ -709,7 +732,7 @@ install_cron() {
 
     ensure_cron_installed
 
-    local command="$INSTALL_PATH --cron --log-user $LOG_USER >/dev/null 2>&1"
+    local command="$INSTALL_PATH --log-user $LOG_USER >/dev/null 2>&1"
 
     if [[ "$DISTRO_FAMILY" == "apk" ]]; then
         # BusyBox crond on Alpine does not read /etc/cron.d.
