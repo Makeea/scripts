@@ -1,404 +1,154 @@
-# Comprehensive .gitignore for Mac, Windows, and Linux
+# Files that should never be committed: OS junk, editor files, build output,
+# logs, temp files, and secrets. Installers, archives, and binaries are allowed
+# on purpose, so a script repo can ship them.
 
 # ==================== macOS ====================
-# System files
 .DS_Store
 .DS_Store?
 ._*
+.AppleDouble
+.LSOverride
 .Spotlight-V100
 .Trashes
-ehthumbs.db
-Thumbs.db
-
-# AppleDouble files
-**/.AppleDouble/
-**/.LSOverride
-
-# Icon must end with two \r
-Icon
-
-# Thumbnails
-._*
-
-# Files that might appear in the root of a volume
-.DocumentRevisions-V100
 .fseventsd
-.Spotlight-V100
+.DocumentRevisions-V100
 .TemporaryItems
-.Trashes
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
-
-# Directories potentially created on remote AFP share
 .AppleDB
 .AppleDesktop
 Network Trash Folder
 Temporary Items
 .apdisk
-
-# macOS specific development files
 .localized
+# Custom folder icon file. The name ends with two carriage returns.
+Icon
 
 # ==================== Windows ====================
-# Windows thumbnail cache files
 Thumbs.db
 Thumbs.db:encryptable
 ehthumbs.db
 ehthumbs_vista.db
-
-# Dump file
-*.stackdump
-
-# Folder config file
 [Dd]esktop.ini
-
-# Recycle Bin used on file shares
 $RECYCLE.BIN/
-
-# Windows Installer files
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-
-# Windows shortcuts
-*.lnk
-
-# System Volume Information (Windows System Restore)
 System Volume Information/
-
-# Windows Search Index
-*.winmd
-
-# Windows prefetch files
-*.pf
+*.stackdump
+# Download marker files left when copying from Windows or WSL
+*Zone.Identifier
+# Office lock files (~$report.docx)
+~$*
 
 # ==================== Linux ====================
-# Temporary files
 *~
+.directory
+.fuse_hidden*
 .nfs*
-
-# Linux trash folder which might appear on any partition or disk
 .Trash-*
 
-# .nfs files are created when an open file is removed but is still being accessed
-.nfs*
-
-# Editor backup files
-*~
-*.bak
-.*.swp
-.*.swo
-
-# ==================== General Development ====================
-# IDE and Editor files
+# ==================== Editors and IDEs ====================
+# VS Code
 .vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-.project
-.classpath
-.settings/
 *.code-workspace
-
-# JetBrains IDEs
+.history/
+# JetBrains
 .idea/
 *.iml
 *.ipr
 *.iws
-.idea_modules/
-atlassian-ide-plugin.xml
-com_crashlytics_export_strings.xml
-crashlytics.properties
-crashlytics-build.properties
-fabric.properties
-
-# Visual Studio Code
-.vscode/
-*.code-workspace
-
-# Sublime Text
-*.sublime-project
-*.sublime-workspace
-
 # Vim
 *.swp
 *.swo
-*~
+.*.sw[a-p]
+Session.vim
 .netrwhist
-
 # Emacs
-*~
 \#*\#
-/.emacs.desktop
-/.emacs.desktop.lock
-*.elc
-auto-save-list
-tramp
 .\#*
-.org-id-locations
-*_archive
-*_flymake.*
-/eshell/history
-/eshell/lastdir
-/elpa/
-*.rel
-
-# Eclipse
-.metadata
-bin/
-tmp/
-*.tmp
-*.bak
-*.swp
-*~.nib
-local.properties
-.settings/
-.loadpath
-.recommenders
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+# Eclipse and NetBeans
 .project
-.externalToolBuilders/
-*.launch
-*.pydevproject
-.cproject
-.autotools
-.factorypath
-.buildpath
-.target
-.tern-project
-.texlipse
-.springBeans
-.recommenders/
-.apt_generated/
-.cache-main
-.scala_dependencies
-.worksheet
-
-# NetBeans
+.classpath
+.settings/
 /nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
 
-# ==================== Version Control ====================
-# Git
-.git/
-*.orig
-
-# SVN
-.svn/
-
-# Mercurial
-.hg/
-.hgignore
-
-# Bazaar
-.bzr/
-.bzrignore
-
-# ==================== Build and Dependencies ====================
+# ==================== Build output and dependencies ====================
 # Node.js
 node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.npm
+.npm/
 .eslintcache
-.node_repl_history
-*.tgz
-.yarn-integrity
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-.env
-.venv
-env/
+.eggs/
+.venv/
 venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Java
-*.class
-*.log
-*.ctxt
-.mtj.tmp/
-*.jar
-*.war
-*.nar
-*.ear
-*.zip
-*.tar.gz
-*.rar
-hs_err_pid*
-
-# C/C++
-*.o
-*.ko
-*.obj
-*.elf
-*.ilk
-*.map
-*.exp
-*.gch
-*.pch
-*.lib
-*.a
-*.la
-*.lo
-*.dll
-*.so
-*.so.*
-*.dylib
-*.exe
-*.out
-*.app
-
+env/
+.pytest_cache/
+.mypy_cache/
+# Ruby
+.bundle/
+vendor/bundle/
 # Rust
 target/
-Cargo.lock
-**/*.rs.bk
+# C and C++ object files
+*.o
+*.obj
+# General build folders
+build/
+dist/
 
-# Go
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
-*.out
-go.work
-
-# Ruby
-*.gem
-*.rbc
-/.config
-/coverage/
-/InstalledFiles
-/pkg/
-/spec/reports/
-/spec/examples.txt
-/test/tmp/
-/test/version_tmp/
-/tmp/
-.bundle/
-vendor/bundle
-.rvmrc
-
-# PHP
-/vendor/
-composer.phar
-composer.lock
-
-# .NET
-bin/
-obj/
-*.user
-*.suo
-*.userprefs
-packages/
-*.nupkg
-
-# ==================== Logs and Databases ====================
-# Log files
+# ==================== Logs, temp, and cache ====================
 *.log
-logs/
 *.log.*
-
-# Database files
-*.sqlite
-*.sqlite3
-*.db
-*.db3
-
-# ==================== Temporary and Cache Files ====================
-# Temporary files
+logs/
 tmp/
 temp/
 .tmp/
-.temp/
-
-# Cache directories
+*.tmp
 .cache/
-cache/
 .sass-cache/
 
-# ==================== Environment and Configuration ====================
-# Environment variables
-.env
-.env.local
-.env.*.local
-.envrc
-
-# Configuration files with sensitive data
-config.local.*
-*.local
-secrets.*
-.secrets
-
-# ==================== Backup Files ====================
-# General backup files
-*.backup
+# ==================== Backups ====================
 *.bak
+*.backup
 *.old
 *.orig
 *.save
-*~
 
-# ==================== Archive Files ====================
-# Compressed files (usually shouldn't be in repo)
-*.7z
-*.dmg
-*.gz
-*.iso
-*.jar
-*.rar
-*.tar
-*.zip
+# ==================== Secrets ====================
+# Environment files. Commit an example file instead.
+.env
+.env.*
+!.env.example
+!.env.sample
+# SSH keys (public keys are fine to commit)
+id_rsa
+id_rsa_*
+id_ecdsa
+id_ecdsa_*
+id_ed25519
+id_ed25519_*
+!*.pub
+# Certificates and private keys
+*.pem
+*.key
+*.p12
+*.pfx
+# VPN configs, password databases, and credential files
+*.ovpn
+*.kdbx
+credentials.json
+.netrc
+secrets.*
+.secrets
+config.local.*
 
-# ==================== OS Generated Files ====================
-# Folder view configuration files
-.DS_Store
-Desktop.ini
-
-# File system attribute files
-.directory
-
-# ==================== Custom Application Files ====================
-# Add your specific application files here
-# Example:
-# myapp.conf
-# local_settings.py*.DS_Store*
-*Zone.Identifier
-
+# ==================== This repo ====================
 # Personal scripts for this machine only
 _local-scripts/
