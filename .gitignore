@@ -399,3 +399,6 @@ Desktop.ini
 # myapp.conf
 # local_settings.py*.DS_Store*
 *Zone.Identifier
+
+# Personal scripts for this machine only
+_local-scripts/
